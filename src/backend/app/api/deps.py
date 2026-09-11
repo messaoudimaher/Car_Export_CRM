@@ -1,5 +1,6 @@
 """FastAPI Request Dependencies & CurrentUser Authentication Injection."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -8,7 +9,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
-from app.core.errors import UnauthorizedException
+from app.core.errors import ForbiddenException, UnauthorizedException
 from app.core.security import decode_access_token
 from app.models.user import User, UserRole
 
@@ -72,3 +73,32 @@ async def get_current_user(
         email=user.email,
         is_active=user.is_active,
     )
+
+
+def require_roles(*allowed_roles: UserRole | str) -> Callable[[CurrentUser], CurrentUser]:
+    """Dependency factory returning a dependency that enforces RBAC authorization.
+
+    Args:
+        *allowed_roles: One or more permitted UserRoles or role strings.
+
+    Returns:
+        Callable[[CurrentUser], CurrentUser]: FastAPI dependency returning CurrentUser if permitted
+            or raising ForbiddenException (HTTP 403) if unauthorized.
+    """
+
+    def role_checker(current_user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+        user_role_val = (
+            current_user.role.value
+            if isinstance(current_user.role, UserRole)
+            else str(current_user.role)
+        )
+        allowed_str_list = [
+            role.value if isinstance(role, UserRole) else str(role) for role in allowed_roles
+        ]
+        if user_role_val not in allowed_str_list:
+            raise ForbiddenException(
+                f"User role '{user_role_val}' is not authorized to access this resource."
+            )
+        return current_user
+
+    return role_checker
