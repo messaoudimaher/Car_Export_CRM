@@ -12,6 +12,7 @@ from app.models.base import Base
 
 if TYPE_CHECKING:
     from app.models.conversation import WhatsAppConversation
+    from app.models.lead import Lead
     from app.models.tenant import Tenant
 
 
@@ -79,6 +80,11 @@ class User(Base):
 
     assigned_conversations: Mapped[list["WhatsAppConversation"]] = relationship(
         "WhatsAppConversation",
+        back_populates="assigned_agent",
+    )
+
+    assigned_leads: Mapped[list["Lead"]] = relationship(
+        "Lead",
         back_populates="assigned_agent",
     )
 

@@ -13,6 +13,7 @@ from app.models.base import Base
 
 if TYPE_CHECKING:
     from app.models.customer import Customer
+    from app.models.lead import Lead
     from app.models.tenant import Tenant
     from app.models.user import User
 
@@ -177,6 +178,11 @@ class VehicleRequest(Base):
 
     confirmed_by_user: Mapped["User | None"] = relationship(
         "User",
+    )
+
+    leads: Mapped[list["Lead"]] = relationship(
+        "Lead",
+        back_populates="vehicle_request",
     )
 
     def __init__(self, **kw: object) -> None:
