@@ -1,18 +1,16 @@
 """FastAPI Application Entry Point & Global Middleware."""
 
-import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, status
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI
 
 from app.api.middleware.correlation import CorrelationMiddleware
 from app.api.v1.router import api_v1_router
 from app.core.config import settings
+from app.core.errors import register_exception_handlers
 from app.core.logging import (
     configure_logging,
-    correlation_id_ctx,
     logger,
 )
 
@@ -46,30 +44,8 @@ def create_app() -> FastAPI:
     # Register Correlation ID & Context Tracing Middleware
     app.add_middleware(CorrelationMiddleware)
 
-    # Global Exception Handler returning RFC 7807 compatible error envelope
-    @app.exception_handler(Exception)
-    async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-        corr_id = correlation_id_ctx.get() or str(uuid.uuid4())
-        logger.error(
-            "unhandled_server_error",
-            extra={
-                "path": request.url.path,
-                "error": str(exc),
-            },
-            exc_info=exc,
-        )
-        return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={
-                "type": "https://errors.carexportcrm.com/internal-error",
-                "title": "Internal Server Error",
-                "status": 500,
-                "detail": "An unexpected server error occurred. Please contact support.",
-                "instance": request.url.path,
-                "correlation_id": corr_id,
-            },
-            headers={"X-Correlation-ID": corr_id},
-        )
+    # Register RFC 7807 Problem Details Exception Handlers (ADR 0008)
+    register_exception_handlers(app)
 
     # Include API routers
     app.include_router(api_v1_router)
