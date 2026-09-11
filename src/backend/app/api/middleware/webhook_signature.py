@@ -63,4 +63,3 @@ class WebhookSignatureMiddleware(BaseHTTPMiddleware):
             detail="Invalid or missing X-Hub-Signature-256 webhook signature. Access denied.",
             instance=request.url.path,
         )
-

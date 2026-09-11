@@ -9,7 +9,9 @@ from app.models.base import Base
 
 if TYPE_CHECKING:
     from app.models.customer import Customer
+    from app.models.inbound_message import InboundMessage
     from app.models.user import User
+    from app.models.whatsapp_account import WhatsAppAccount
 
 
 class Tenant(Base):
@@ -47,6 +49,18 @@ class Tenant(Base):
 
     customers: Mapped[list["Customer"]] = relationship(
         "Customer",
+        back_populates="tenant",
+        cascade="all, delete-orphan",
+    )
+
+    whatsapp_accounts: Mapped[list["WhatsAppAccount"]] = relationship(
+        "WhatsAppAccount",
+        back_populates="tenant",
+        cascade="all, delete-orphan",
+    )
+
+    inbound_messages: Mapped[list["InboundMessage"]] = relationship(
+        "InboundMessage",
         back_populates="tenant",
         cascade="all, delete-orphan",
     )
