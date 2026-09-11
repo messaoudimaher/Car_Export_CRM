@@ -71,6 +71,21 @@ async def process_inbound_message(
         inbound_msg.processed_at = datetime.now(UTC)
         await session.commit()
 
+        from app.core.ws_manager import ws_manager
+
+        await ws_manager.broadcast_to_tenant(
+            tenant_id=tenant_uuid,
+            event_type="INBOX_MESSAGE_RECEIVED",
+            data={
+                "id": str(inbound_msg.id),
+                "tenant_id": str(inbound_msg.tenant_id),
+                "provider_message_id": inbound_msg.provider_message_id,
+                "sender_phone_e164": inbound_msg.sender_phone_e164,
+                "message_type": inbound_msg.message_type,
+                "content": inbound_msg.content,
+            },
+        )
+
         logger.info(
             "Successfully processed inbound WhatsApp message background job",
             extra={

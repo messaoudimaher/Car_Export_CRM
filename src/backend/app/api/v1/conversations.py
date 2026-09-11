@@ -309,4 +309,14 @@ async def post_message(
         },
     )
 
-    return MessageEnvelope(success=True, data=MessageResponse.model_validate(created_message))
+    msg_response = MessageResponse.model_validate(created_message)
+
+    from app.core.ws_manager import ws_manager
+
+    await ws_manager.broadcast_to_tenant(
+        tenant_id=tenant_id,
+        event_type="INBOX_MESSAGE_RECEIVED",
+        data=msg_response.model_dump(mode="json"),
+    )
+
+    return MessageEnvelope(success=True, data=msg_response)
