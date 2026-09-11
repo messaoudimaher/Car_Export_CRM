@@ -54,6 +54,7 @@ select = [
 ]
 ignore = [
     "S101", # Use of assert in tests is allowed
+    "B008", # FastAPI Depends() in parameter defaults
 ]
 
 [tool.ruff.lint.isort]

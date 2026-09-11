@@ -66,7 +66,7 @@ class BaseRepository(Generic[ModelT]):
                 )
 
             if current_version is not None:
-                setattr(entity, "version", current_version + 1)
+                setattr(entity, "version", current_version + 1)  # noqa: B010
 
         merged = await self.session.merge(entity)
         await self.session.flush()
