@@ -1,7 +1,7 @@
 """Base Declarative Model Class & Timestamp Mixin adhering to ADR 0005 (UUIDv7 primary keys)."""
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, func
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -40,8 +40,13 @@ class Base(DeclarativeBase, TimestampMixin):
     )
 
     def __init__(self, **kw: object) -> None:
-        """Initialize model ensuring UUIDv7 ID is set in memory per ADR 0005."""
+        """Initialize model ensuring UUIDv7 ID and timestamps are set in memory per ADR 0005."""
         if "id" not in kw or kw["id"] is None:
             kw["id"] = generate_uuidv7()
+        now = datetime.now(UTC)
+        if "created_at" not in kw or kw["created_at"] is None:
+            kw["created_at"] = now
+        if "updated_at" not in kw or kw["updated_at"] is None:
+            kw["updated_at"] = now
         for k, v in kw.items():
             setattr(self, k, v)
