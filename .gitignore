@@ -1,7 +1,3 @@
-# Markdown Documentation (Do not push .md files to remote per project rule)
-*.md
-docs/
-
 # Python & Virtualenv
 __pycache__/
 *.py[cod]
