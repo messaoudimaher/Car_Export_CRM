@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from fastapi import Depends
@@ -12,6 +13,10 @@ from app.core.database import get_db_session
 from app.core.errors import ForbiddenException, UnauthorizedException
 from app.core.security import decode_access_token
 from app.models.user import User, UserRole
+
+if TYPE_CHECKING:
+    from app.ports.whatsapp import WhatsAppProvider
+
 
 security_scheme = HTTPBearer(auto_error=False)
 
@@ -147,3 +152,17 @@ def validate_tenant_body_override(
                 "Client tenant_id does not match authenticated context. Injection blocked."
             )
     return current_tenant_id
+
+
+def get_whatsapp_provider() -> "WhatsAppProvider":
+    """Dependency returning configured WhatsAppProvider implementation based on environment."""
+    from app.adapters.whatsapp_demo import DemoWhatsAppProvider
+    from app.adapters.whatsapp_meta import MetaWhatsAppProvider
+    from app.core.config import settings
+
+    if settings.ENVIRONMENT in (
+        "development",
+        "test",
+    ) and settings.META_WEBHOOK_APP_SECRET.startswith("dev_"):
+        return DemoWhatsAppProvider()
+    return MetaWhatsAppProvider(app_secret=settings.META_WEBHOOK_APP_SECRET)
