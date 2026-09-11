@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.middleware.correlation import CorrelationMiddleware
+from app.api.middleware.webhook_signature import WebhookSignatureMiddleware
 from app.api.v1.router import api_v1_router
 from app.core.config import settings
 from app.core.errors import register_exception_handlers
@@ -43,6 +44,9 @@ def create_app() -> FastAPI:
 
     # Register Correlation ID & Context Tracing Middleware
     app.add_middleware(CorrelationMiddleware)
+
+    # Register Webhook Signature Verification Middleware (BR-007)
+    app.add_middleware(WebhookSignatureMiddleware)
 
     # Register RFC 7807 Problem Details Exception Handlers (ADR 0008)
     register_exception_handlers(app)
