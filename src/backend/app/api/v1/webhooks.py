@@ -13,6 +13,7 @@ from app.core.config import settings
 from app.core.database import get_db_session
 from app.core.errors import ForbiddenException, ValidationException
 from app.core.logging import logger
+from app.core.redis import enqueue_inbound_message_job
 from app.models.inbound_message import InboundMessage
 from app.models.whatsapp_account import WhatsAppAccount
 from app.ports.whatsapp import WhatsAppProvider
@@ -119,12 +120,17 @@ async def receive_whatsapp_webhook(
         try:
             await db.commit()
             await db.refresh(inbound_record)
+            job_id = await enqueue_inbound_message_job(
+                message_id=inbound_record.id,
+                tenant_id=account.tenant_id,
+            )
             logger.info(
                 "Inbound WhatsApp message persisted pre-ACK",
                 extra={
                     "inbound_id": str(inbound_record.id),
                     "tenant_id": str(account.tenant_id),
                     "wamid": msg.wamid,
+                    "job_id": job_id,
                 },
             )
             results.append(
@@ -132,6 +138,7 @@ async def receive_whatsapp_webhook(
                     "status": "received",
                     "inbound_message_id": str(inbound_record.id),
                     "wamid": msg.wamid,
+                    "job_id": job_id,
                 }
             )
         except IntegrityError:
