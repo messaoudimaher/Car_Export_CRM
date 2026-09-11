@@ -17,6 +17,8 @@ async_engine: AsyncEngine = create_async_engine(
     settings.DATABASE_URL,
     pool_size=settings.DATABASE_POOL_SIZE,
     max_overflow=settings.DATABASE_MAX_OVERFLOW,
+    pool_recycle=1800,
+    pool_pre_ping=True,
     echo=settings.DEBUG,
     future=True,
 )
@@ -36,6 +38,8 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     async with async_session_factory() as session:
         try:
             yield session
+            if session.is_active:
+                await session.commit()
         except Exception:
             await session.rollback()
             raise
