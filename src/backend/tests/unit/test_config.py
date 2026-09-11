@@ -99,3 +99,12 @@ def test_production_environment_accepts_valid_secrets() -> None:
         LLM_PROVIDER_API_KEY="prod_llm_provider_api_key_67890",  # noqa: S106
     )
     assert prod_settings.is_production is True
+
+
+def test_jwt_secret_key_alias_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify JWT_SECRET_KEY environment variable populates canonical JWT_SECRET attribute."""
+    monkeypatch.setenv("JWT_SECRET_KEY", "alias_secret_key_environment_variable_32_bytes")
+    monkeypatch.delenv("JWT_SECRET", raising=False)
+
+    settings = Settings()
+    assert settings.JWT_SECRET == "alias_secret_key_environment_variable_32_bytes"  # noqa: S105

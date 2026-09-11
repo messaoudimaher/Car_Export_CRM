@@ -2,7 +2,7 @@
 
 from typing import Literal, Self
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     # Security & Token Authentication
     JWT_SECRET: str = Field(
         default="dev_jwt_secret_key_change_me_in_production_min_32_bytes_long",
+        validation_alias=AliasChoices("JWT_SECRET", "JWT_SECRET_KEY"),
         description="Secret key used for signing JWT tokens",
     )
     JWT_ALGORITHM: str = Field(default="HS256", description="JWT Signing Algorithm")
