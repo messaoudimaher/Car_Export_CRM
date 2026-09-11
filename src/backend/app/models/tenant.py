@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
 
 if TYPE_CHECKING:
+    from app.models.customer import Customer
     from app.models.user import User
 
 
@@ -40,6 +41,12 @@ class Tenant(Base):
     # Relationships
     users: Mapped[list["User"]] = relationship(
         "User",
+        back_populates="tenant",
+        cascade="all, delete-orphan",
+    )
+
+    customers: Mapped[list["Customer"]] = relationship(
+        "Customer",
         back_populates="tenant",
         cascade="all, delete-orphan",
     )

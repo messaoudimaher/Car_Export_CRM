@@ -71,9 +71,7 @@ class TenantRepository(Generic[ModelT]):
                 str(getattr(global_entity, "tenant_id", None)),
             )
 
-        raise NotFoundException(
-            f"{self.model_cls.__name__} with ID '{id_}' not found."
-        )
+        raise NotFoundException(f"{self.model_cls.__name__} with ID '{id_}' not found.")
 
     async def list(self, offset: int = 0, limit: int = 100) -> list[ModelT]:
         """Fetch a paginated list of records strictly scoped to current tenant context."""
