@@ -73,6 +73,15 @@ class TenantRepository(Generic[ModelT]):
 
         raise NotFoundException(f"{self.model_cls.__name__} with ID '{id_}' not found.")
 
+    async def find_one(self, **kwargs: Any) -> ModelT | None:
+        """Fetch a single record matching kwargs strictly scoped to current tenant context."""
+        stmt = select(self.model_cls).where(getattr(self.model_cls, "tenant_id") == self.tenant_id)  # noqa: B009
+        for key, value in kwargs.items():
+            if hasattr(self.model_cls, key):
+                stmt = stmt.where(getattr(self.model_cls, key) == value)  # noqa: B009
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def list(self, offset: int = 0, limit: int = 100) -> list[ModelT]:
         """Fetch a paginated list of records strictly scoped to current tenant context."""
         stmt = (
