@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.core.config import settings
 from app.core.database import async_engine, check_database_health, get_db_session
-from app.models.base import Base
+from app.models.base import Base, TimestampMixin
 
 
 def test_base_model_instantiation() -> None:
@@ -21,6 +21,19 @@ def test_base_model_instantiation() -> None:
     assert instance.id is not None
     assert isinstance(instance.id, uuid.UUID)
     assert instance.id.version == 7
+
+
+def test_timestamp_mixin_model_instantiation() -> None:
+    """Verify TimestampMixin defines created_at and updated_at mapper columns."""
+    assert hasattr(TimestampMixin, "created_at")
+    assert hasattr(TimestampMixin, "updated_at")
+
+    class DummyTimestampModel(Base, TimestampMixin):
+        __tablename__ = "dummy_timestamp_test_table"
+
+    instance = DummyTimestampModel()
+    assert instance.id is not None
+    assert isinstance(instance.id, uuid.UUID)
 
 
 def test_async_engine_pool_configuration() -> None:
