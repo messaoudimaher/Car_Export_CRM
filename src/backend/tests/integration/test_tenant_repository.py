@@ -107,13 +107,9 @@ async def test_tenant_repository_cross_tenant_delete_prevention() -> None:
     mock_session.execute.return_value = mock_result_none
 
     tenant_a_id = uuid.uuid4()
-    tenant_b_id = uuid.uuid4()
-
     repo_a = TenantRepository(mock_session, User, tenant_id=tenant_a_id)
 
     user_b_id = uuid.uuid4()
     delete_result = await repo_a.delete(user_b_id)
     assert delete_result is False
     mock_session.delete.assert_not_called()
-
-

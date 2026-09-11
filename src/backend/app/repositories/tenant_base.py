@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ConcurrencyException, DeveloperSecurityException, NotFoundException
+from app.core.logging import logger
 from app.models.base import Base
 
 ModelT = TypeVar("ModelT", bound=Base)
@@ -35,6 +36,44 @@ class TenantRepository(Generic[ModelT]):
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def get_or_raise(self, id_: Any) -> ModelT:
+        """Fetch record by ID or raise NotFoundException (HTTP 404), masking cross-tenant IDOR.
+
+        If record exists under another tenant, logs SECURITY_CROSS_TENANT_ACCESS_ATTEMPT
+        and raises NotFoundException to conceal resource existence (SEC-010, AC-01).
+
+        Args:
+            id_: Primary key ID.
+
+        Raises:
+            NotFoundException: If record does not exist or belongs to another tenant.
+
+        Returns:
+            ModelT: Found entity record.
+        """
+        entity = await self.get_by_id(id_)
+        if entity is not None:
+            return entity
+
+        # Check if record exists globally under a different tenant for IDOR security logging
+        global_stmt = select(self.model_cls).where(getattr(self.model_cls, "id") == id_)  # noqa: B009
+        global_result = await self.session.execute(global_stmt)
+        global_entity = global_result.scalar_one_or_none()
+
+        if global_entity is not None:
+            logger.warning(
+                "SECURITY_CROSS_TENANT_ACCESS_ATTEMPT tenant_id=%s "
+                "requested_id=%s model=%s target_tenant_id=%s",
+                str(self.tenant_id),
+                str(id_),
+                self.model_cls.__name__,
+                str(getattr(global_entity, "tenant_id", None)),
+            )
+
+        raise NotFoundException(
+            f"{self.model_cls.__name__} with ID '{id_}' not found."
+        )
 
     async def list(self, offset: int = 0, limit: int = 100) -> list[ModelT]:
         """Fetch a paginated list of records strictly scoped to current tenant context."""
@@ -78,11 +117,7 @@ class TenantRepository(Generic[ModelT]):
         if entity_id is None:
             raise NotFoundException(f"Record of type {self.model_cls.__name__} has no primary key.")
 
-        db_entity = await self.get_by_id(entity_id)
-        if db_entity is None:
-            raise NotFoundException(
-                f"Record of type {self.model_cls.__name__} not found in tenant scope."
-            )
+        db_entity = await self.get_or_raise(entity_id)
 
         if version_to_check is not None:
             db_version = getattr(db_entity, "version", None)
@@ -104,6 +139,17 @@ class TenantRepository(Generic[ModelT]):
         """Delete a record by primary key ID strictly scoped to current tenant context."""
         entity = await self.get_by_id(id_)
         if entity is None:
+            # Check for cross tenant delete attempt for audit logging
+            global_stmt = select(self.model_cls).where(getattr(self.model_cls, "id") == id_)  # noqa: B009
+            global_res = await self.session.execute(global_stmt)
+            if global_res.scalar_one_or_none() is not None:
+                logger.warning(
+                    "SECURITY_CROSS_TENANT_ACCESS_ATTEMPT action=DELETE "
+                    "tenant_id=%s requested_id=%s model=%s",
+                    str(self.tenant_id),
+                    str(id_),
+                    self.model_cls.__name__,
+                )
             return False
         await self.session.delete(entity)
         await self.session.flush()
