@@ -2,6 +2,7 @@
 
 from app.core.errors import (
     AppException,
+    ConcurrencyException,
     ConflictException,
     ForbiddenException,
     NotFoundException,
@@ -62,6 +63,14 @@ def test_conflict_exception() -> None:
     exc = ConflictException()
     assert exc.status_code == 409
     assert exc.title == "Resource Conflict"
+
+
+def test_concurrency_exception() -> None:
+    """Verify ConcurrencyException attributes (HTTP 412)."""
+    exc = ConcurrencyException()
+    assert exc.status_code == 412
+    assert exc.title == "Precondition Failed"
+    assert exc.type_uri == "https://errors.carexportcrm.com/concurrency-conflict"
 
 
 def test_rate_limit_exception() -> None:

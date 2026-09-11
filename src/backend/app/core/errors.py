@@ -129,6 +129,25 @@ class ConflictException(AppException):
         )
 
 
+class ConcurrencyException(AppException):
+    """Optimistic concurrency control conflict exception (HTTP 412)."""
+
+    def __init__(
+        self,
+        message: str = "Resource version conflict. Record modified by another request.",
+        detail: str | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            status_code=status.HTTP_412_PRECONDITION_FAILED,
+            title="Precondition Failed",
+            type_uri="https://errors.carexportcrm.com/concurrency-conflict",
+            detail=detail,
+            details=details,
+        )
+
+
 class RateLimitException(AppException):
     """Rate limit exceeded exception (HTTP 429)."""
 
