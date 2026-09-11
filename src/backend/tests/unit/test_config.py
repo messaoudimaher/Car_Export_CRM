@@ -55,7 +55,20 @@ def test_invalid_database_url_validation() -> None:
     """Verify invalid database URL format raises validation error."""
     with pytest.raises(ValidationError) as exc_info:
         Settings(DATABASE_URL="mysql://user:pass@localhost:3306/db")
-    assert "DATABASE_URL must start with" in str(exc_info.value)
+    assert "Database URL must start with" in str(exc_info.value)
+
+
+def test_invalid_database_migrator_url_validation() -> None:
+    """Verify invalid database migrator URL format raises validation error."""
+    with pytest.raises(ValidationError) as exc_info:
+        Settings(DATABASE_MIGRATOR_URL="sqlite:///test.db")
+    assert "Database URL must start with" in str(exc_info.value)
+
+
+def test_database_migrator_url_default() -> None:
+    """Verify DATABASE_MIGRATOR_URL uses car_export_migrator credentials."""
+    settings = Settings()
+    assert "car_export_migrator" in settings.DATABASE_MIGRATOR_URL
 
 
 def test_invalid_redis_url_validation() -> None:

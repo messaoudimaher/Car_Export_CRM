@@ -27,7 +27,11 @@ class Settings(BaseSettings):
     # Database Configuration (PostgreSQL + asyncpg)
     DATABASE_URL: str = Field(
         default="postgresql+asyncpg://car_export_app:local_dev_password@localhost:5432/car_export_crm",
-        description="Async PostgreSQL Connection URI",
+        description="Async PostgreSQL Connection URI for application backend",
+    )
+    DATABASE_MIGRATOR_URL: str = Field(
+        default="postgresql+asyncpg://car_export_migrator:local_migrator_password@localhost:5432/car_export_crm",
+        description="Async PostgreSQL Migration Connection URI for DDL execution",
     )
     DATABASE_POOL_SIZE: int = Field(default=5, ge=1, le=50, description="SQLAlchemy Pool Size")
     DATABASE_MAX_OVERFLOW: int = Field(
@@ -118,13 +122,13 @@ class Settings(BaseSettings):
             raise ValueError("JWT_SECRET must be at least 32 characters long for security.")
         return v
 
-    @field_validator("DATABASE_URL")
+    @field_validator("DATABASE_URL", "DATABASE_MIGRATOR_URL")
     @classmethod
     def validate_database_url(cls, v: str) -> str:
-        """Ensure DATABASE_URL is a valid PostgreSQL connection URI."""
+        """Ensure database connection URIs are valid PostgreSQL connection strings."""
         if not v.startswith(("postgresql://", "postgresql+asyncpg://")):
             raise ValueError(
-                "DATABASE_URL must start with 'postgresql://' or 'postgresql+asyncpg://'"
+                "Database URL must start with 'postgresql://' or 'postgresql+asyncpg://'"
             )
         return v
 
