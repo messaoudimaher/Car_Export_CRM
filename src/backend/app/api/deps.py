@@ -147,4 +147,3 @@ def validate_tenant_body_override(
                 "Client tenant_id does not match authenticated context. Injection blocked."
             )
     return current_tenant_id
-

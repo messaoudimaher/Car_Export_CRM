@@ -186,6 +186,25 @@ class ServiceUnavailableException(AppException):
         )
 
 
+class DeveloperSecurityException(AppException):
+    """Internal developer security boundary violation exception (HTTP 500)."""
+
+    def __init__(
+        self,
+        message: str = "A security invariant was violated due to missing security context.",
+        detail: str | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            title="Security Context Invariant Error",
+            type_uri="https://errors.carexportcrm.com/security-context-error",
+            detail=detail,
+            details=details,
+        )
+
+
 def create_problem_response(
     status_code: int,
     title: str,
