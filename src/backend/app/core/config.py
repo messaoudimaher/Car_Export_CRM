@@ -1,8 +1,8 @@
 """Application Configuration Module using Pydantic Settings."""
 
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -52,12 +52,53 @@ class Settings(BaseSettings):
         default="dev_meta_app_secret_placeholder",
         description="Meta WhatsApp Webhook HMAC App Secret",
     )
+    META_WEBHOOK_VERIFY_TOKEN: str = Field(
+        default="dev_meta_verify_token_placeholder",
+        description="Meta WhatsApp Webhook Verification Challenge Token",
+    )
+
+    # AI / LLM Configuration
+    LLM_PROVIDER: str = Field(default="openai", description="Default LLM Provider Vendor")
     LLM_PROVIDER_API_KEY: str = Field(
         default="dev_llm_key_placeholder", description="LLM Vendor Provider API Key"
     )
+    EMBEDDING_PROVIDER_API_KEY: str = Field(
+        default="dev_embedding_key_placeholder", description="Embedding Provider API Key"
+    )
+
+    # Object Storage Configuration (S3)
     OBJECT_STORAGE_BUCKET: str = Field(
         default="car-export-crm-dev-storage", description="Private S3 Object Storage Bucket"
     )
+    S3_ENDPOINT_URL: str | None = Field(
+        default=None, description="Optional custom S3 / MinIO endpoint URL"
+    )
+    S3_ACCESS_KEY_ID: str = Field(
+        default="dev_s3_key_id_placeholder", description="S3 Access Key ID"
+    )
+    S3_SECRET_ACCESS_KEY: str = Field(
+        default="dev_s3_secret_access_key_placeholder", description="S3 Secret Access Key"
+    )
+
+    @property
+    def is_production(self) -> bool:
+        """Check if current environment is production."""
+        return self.ENVIRONMENT == "production"
+
+    @property
+    def is_staging(self) -> bool:
+        """Check if current environment is staging."""
+        return self.ENVIRONMENT == "staging"
+
+    @property
+    def is_development(self) -> bool:
+        """Check if current environment is development."""
+        return self.ENVIRONMENT == "development"
+
+    @property
+    def is_test(self) -> bool:
+        """Check if current environment is test."""
+        return self.ENVIRONMENT == "test"
 
     @field_validator("LOG_LEVEL")
     @classmethod
@@ -71,11 +112,50 @@ class Settings(BaseSettings):
 
     @field_validator("JWT_SECRET")
     @classmethod
-    def validate_jwt_secret(cls, v: str, info: object) -> str:
+    def validate_jwt_secret(cls, v: str) -> str:
         """Ensure JWT secret meets minimum length requirements."""
         if len(v) < 32:
             raise ValueError("JWT_SECRET must be at least 32 characters long for security.")
         return v
+
+    @field_validator("DATABASE_URL")
+    @classmethod
+    def validate_database_url(cls, v: str) -> str:
+        """Ensure DATABASE_URL is a valid PostgreSQL connection URI."""
+        if not v.startswith(("postgresql://", "postgresql+asyncpg://")):
+            raise ValueError(
+                "DATABASE_URL must start with 'postgresql://' or 'postgresql+asyncpg://'"
+            )
+        return v
+
+    @field_validator("REDIS_URL")
+    @classmethod
+    def validate_redis_url(cls, v: str) -> str:
+        """Ensure REDIS_URL is a valid Redis connection URI."""
+        if not v.startswith(("redis://", "rediss://")):
+            raise ValueError("REDIS_URL must start with 'redis://' or 'rediss://'")
+        return v
+
+    @model_validator(mode="after")
+    def validate_production_secrets(self) -> Self:
+        """Prevent default development placeholder secrets in production or staging environments."""
+        if self.ENVIRONMENT in ("production", "staging"):
+            if "dev_" in self.JWT_SECRET:
+                msg = f"Insecure default JWT_SECRET is forbidden in {self.ENVIRONMENT} environment."
+                raise ValueError(msg)
+            if "dev_" in self.META_WEBHOOK_APP_SECRET:
+                msg = (
+                    "Insecure default META_WEBHOOK_APP_SECRET is forbidden in "
+                    f"{self.ENVIRONMENT} environment."
+                )
+                raise ValueError(msg)
+            if "dev_" in self.LLM_PROVIDER_API_KEY:
+                msg = (
+                    "Insecure default LLM_PROVIDER_API_KEY is forbidden in "
+                    f"{self.ENVIRONMENT} environment."
+                )
+                raise ValueError(msg)
+        return self
 
 
 def get_settings() -> Settings:
