@@ -8,8 +8,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
 
 if TYPE_CHECKING:
+    from app.models.conversation import WhatsAppConversation
     from app.models.customer import Customer
     from app.models.inbound_message import InboundMessage
+    from app.models.message import Message
     from app.models.user import User
     from app.models.whatsapp_account import WhatsAppAccount
 
@@ -61,6 +63,18 @@ class Tenant(Base):
 
     inbound_messages: Mapped[list["InboundMessage"]] = relationship(
         "InboundMessage",
+        back_populates="tenant",
+        cascade="all, delete-orphan",
+    )
+
+    conversations: Mapped[list["WhatsAppConversation"]] = relationship(
+        "WhatsAppConversation",
+        back_populates="tenant",
+        cascade="all, delete-orphan",
+    )
+
+    messages: Mapped[list["Message"]] = relationship(
+        "Message",
         back_populates="tenant",
         cascade="all, delete-orphan",
     )

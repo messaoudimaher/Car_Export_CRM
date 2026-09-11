@@ -11,6 +11,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
 
 if TYPE_CHECKING:
+    from app.models.conversation import WhatsAppConversation
     from app.models.tenant import Tenant
 
 
@@ -74,6 +75,11 @@ class User(Base):
     tenant: Mapped["Tenant"] = relationship(
         "Tenant",
         back_populates="users",
+    )
+
+    assigned_conversations: Mapped[list["WhatsAppConversation"]] = relationship(
+        "WhatsAppConversation",
+        back_populates="assigned_agent",
     )
 
     def __init__(self, **kw: object) -> None:
