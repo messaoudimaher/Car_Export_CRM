@@ -12,6 +12,7 @@ from app.models.base import Base
 if TYPE_CHECKING:
     from app.models.conversation import WhatsAppConversation
     from app.models.tenant import Tenant
+    from app.models.vehicle_request import VehicleRequest
 
 
 class Customer(Base):
@@ -101,6 +102,12 @@ class Customer(Base):
 
     conversations: Mapped[list["WhatsAppConversation"]] = relationship(
         "WhatsAppConversation",
+        back_populates="customer",
+        cascade="all, delete-orphan",
+    )
+
+    vehicle_requests: Mapped[list["VehicleRequest"]] = relationship(
+        "VehicleRequest",
         back_populates="customer",
         cascade="all, delete-orphan",
     )

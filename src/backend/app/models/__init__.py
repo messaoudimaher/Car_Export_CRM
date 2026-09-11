@@ -7,6 +7,7 @@ from app.models.inbound_message import InboundMessage
 from app.models.message import Message
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
+from app.models.vehicle_request import VehicleRequest
 from app.models.whatsapp_account import WhatsAppAccount
 
 __all__ = [
@@ -18,6 +19,7 @@ __all__ = [
     "Tenant",
     "User",
     "UserRole",
+    "VehicleRequest",
     "WhatsAppAccount",
     "WhatsAppConversation",
 ]
