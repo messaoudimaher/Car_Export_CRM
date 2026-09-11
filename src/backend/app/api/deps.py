@@ -102,3 +102,49 @@ def require_roles(*allowed_roles: UserRole | str) -> Callable[[CurrentUser], Cur
         return current_user
 
     return role_checker
+
+
+def get_current_tenant_id(current_user: CurrentUser = Depends(get_current_user)) -> UUID:
+    """Extract authenticated tenant_id from server-side credentials (SEC-001, SEC-002).
+
+    Args:
+        current_user: Authenticated user context.
+
+    Returns:
+        UUID: Verified tenant_id belonging to the authenticated user.
+    """
+    return (
+        current_user.tenant_id
+        if isinstance(current_user.tenant_id, UUID)
+        else UUID(str(current_user.tenant_id))
+    )
+
+
+def validate_tenant_body_override(
+    body_tenant_id: UUID | str | None = None,
+    current_tenant_id: UUID = Depends(get_current_tenant_id),
+) -> UUID:
+    """Validate that body payloads do not attempt to override tenant context (SEC-001).
+
+    If body_tenant_id is supplied by client, it MUST match authenticated current_tenant_id.
+    If it differs, a ForbiddenException (HTTP 403) is raised to block tenant injection.
+
+    Args:
+        body_tenant_id: Optional tenant_id field provided in client payload body.
+        current_tenant_id: Server-side authenticated tenant_id.
+
+    Raises:
+        ForbiddenException: If client attempts to specify a conflicting tenant_id.
+
+    Returns:
+        UUID: Verified server-side tenant_id.
+    """
+    if body_tenant_id is not None:
+        supplied = str(body_tenant_id)
+        authenticated = str(current_tenant_id)
+        if supplied != authenticated:
+            raise ForbiddenException(
+                "Client tenant_id does not match authenticated context. Injection blocked."
+            )
+    return current_tenant_id
+
