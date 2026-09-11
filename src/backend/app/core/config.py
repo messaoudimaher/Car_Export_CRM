@@ -1,0 +1,87 @@
+"""Application Configuration Module using Pydantic Settings."""
+
+from typing import Literal
+
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    """Type-safe application configuration settings."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+        extra="ignore",
+    )
+
+    # General Application Settings
+    APP_NAME: str = Field(default="Car-Export-CRM", description="Application Name")
+    ENVIRONMENT: Literal["development", "staging", "production", "test"] = Field(
+        default="development", description="Deployment Environment"
+    )
+    LOG_LEVEL: str = Field(default="INFO", description="Logging Threshold Level")
+    DEBUG: bool = Field(default=False, description="Debug Mode Status")
+
+    # Database Configuration (PostgreSQL + asyncpg)
+    DATABASE_URL: str = Field(
+        default="postgresql+asyncpg://car_export_app:local_dev_password@localhost:5432/car_export_crm",
+        description="Async PostgreSQL Connection URI",
+    )
+    DATABASE_POOL_SIZE: int = Field(default=5, ge=1, le=50, description="SQLAlchemy Pool Size")
+    DATABASE_MAX_OVERFLOW: int = Field(
+        default=10, ge=0, le=100, description="SQLAlchemy Max Overflow"
+    )
+
+    # Redis Configuration
+    REDIS_URL: str = Field(default="redis://localhost:6379/0", description="Redis Connection URI")
+
+    # Security & Token Authentication
+    JWT_SECRET: str = Field(
+        default="dev_jwt_secret_key_change_me_in_production_min_32_bytes_long",
+        description="Secret key used for signing JWT tokens",
+    )
+    JWT_ALGORITHM: str = Field(default="HS256", description="JWT Signing Algorithm")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(
+        default=60, ge=5, description="JWT Token Validity Expiration in Minutes"
+    )
+
+    # External Provider Configuration Placeholders
+    META_WEBHOOK_APP_SECRET: str = Field(
+        default="dev_meta_app_secret_placeholder",
+        description="Meta WhatsApp Webhook HMAC App Secret",
+    )
+    LLM_PROVIDER_API_KEY: str = Field(
+        default="dev_llm_key_placeholder", description="LLM Vendor Provider API Key"
+    )
+    OBJECT_STORAGE_BUCKET: str = Field(
+        default="car-export-crm-dev-storage", description="Private S3 Object Storage Bucket"
+    )
+
+    @field_validator("LOG_LEVEL")
+    @classmethod
+    def validate_log_level(cls, v: str) -> str:
+        """Validate log level string."""
+        allowed = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+        upper_v = v.upper()
+        if upper_v not in allowed:
+            raise ValueError(f"LOG_LEVEL must be one of {allowed}, got '{v}'")
+        return upper_v
+
+    @field_validator("JWT_SECRET")
+    @classmethod
+    def validate_jwt_secret(cls, v: str, info: object) -> str:
+        """Ensure JWT secret meets minimum length requirements."""
+        if len(v) < 32:
+            raise ValueError("JWT_SECRET must be at least 32 characters long for security.")
+        return v
+
+
+def get_settings() -> Settings:
+    """Return an initialized application settings instance."""
+    return Settings()
+
+
+# Singleton instance for easy import across modules
+settings = get_settings()

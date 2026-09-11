@@ -1,0 +1,1 @@
+"""External Infrastructure Adapters Package."""
