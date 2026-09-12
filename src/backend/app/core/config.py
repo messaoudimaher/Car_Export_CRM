@@ -65,11 +65,18 @@ class Settings(BaseSettings):
     # AI / LLM Configuration
     LLM_PROVIDER: str = Field(default="openai", description="Default LLM Provider Vendor")
     LLM_PROVIDER_API_KEY: str = Field(
-        default="dev_llm_key_placeholder", description="LLM Vendor Provider API Key"
+        default="dev_llm_key_placeholder",
+        validation_alias=AliasChoices("LLM_PROVIDER_API_KEY", "OPENAI_API_KEY"),
+        description="LLM Vendor Provider API Key",
     )
     EMBEDDING_PROVIDER_API_KEY: str = Field(
         default="dev_embedding_key_placeholder", description="Embedding Provider API Key"
     )
+
+    @property
+    def OPENAI_API_KEY(self) -> str:
+        """Alias for LLM_PROVIDER_API_KEY for OpenAI adapter compatibility."""
+        return self.LLM_PROVIDER_API_KEY
 
     # Object Storage Configuration (S3)
     OBJECT_STORAGE_BUCKET: str = Field(
