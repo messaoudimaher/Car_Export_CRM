@@ -167,6 +167,17 @@ class Settings(BaseSettings):
                     f"{self.ENVIRONMENT} environment."
                 )
                 raise ValueError(msg)
+        if self.LLM_PROVIDER.lower() == "openai" and self.ENVIRONMENT in ("production", "staging"):
+            if (
+                not self.OPENAI_API_KEY
+                or "dev_" in self.OPENAI_API_KEY
+                or not self.OPENAI_API_KEY.strip()
+            ):
+                msg = (
+                    "LLM_PROVIDER is set to 'openai' but OPENAI_API_KEY is missing or invalid in "
+                    f"{self.ENVIRONMENT} environment."
+                )
+                raise ValueError(msg)
         return self
 
 

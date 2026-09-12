@@ -79,13 +79,16 @@ class DemoLLMAdapter(LLMProvider, EmbeddingProvider):
         self,
         request: EmbeddingRequest,
     ) -> EmbeddingResponse:
-        """Generate mock 1536-dimensional float vector embeddings."""
-        mock_vector = [0.01] * 1536
+        """Generate mock float vector embeddings matching requested dimensions."""
+        dims = request.dimensions or 1536
+        mock_vector = [0.01] * dims
         embeddings = [mock_vector for _ in request.texts]
 
         return EmbeddingResponse(
             embeddings=embeddings,
             model=request.model,
+            dimensions=dims,
+            tenant_id=request.tenant_id,
             prompt_tokens=len(request.texts) * 10,
             latency_ms=5.0,
         )

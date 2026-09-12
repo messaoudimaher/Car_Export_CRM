@@ -36,6 +36,17 @@ def clean_json_payload(raw_output: str) -> str:
     return text
 
 
+def sanitize_log_text(text: str) -> str:
+    """Sanitize raw LLM log preview by redacting customer PII (phone numbers and emails)."""
+    if not text:
+        return ""
+    sanitized = re.sub(
+        r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", "[REDACTED_EMAIL]", text
+    )
+    sanitized = re.sub(r"\+?\d{8,15}", "[REDACTED_PHONE]", sanitized)
+    return sanitized[:200]
+
+
 class AIValidationService:
     """Layer 2 AI Output Validation Engine enforcing Pydantic schema validation (ADR 0012)."""
 
@@ -107,7 +118,7 @@ class AIValidationService:
                     "attempt": attempt,
                     "max_attempts": total_attempts,
                     "error_summary": last_error_message,
-                    "raw_preview": current_raw[:200] if current_raw else "",
+                    "raw_preview": sanitize_log_text(current_raw),
                 },
             )
 
@@ -118,7 +129,7 @@ class AIValidationService:
                     f"Your previous JSON response failed Layer 2 schema validation for "
                     f"target schema '{schema_cls.__name__}'.\n"
                     f"Errors:\n{err_json}\n\n"
-                    f"Previous Output:\n{current_raw}\n\n"
+                    f"Previous Output:\n{sanitize_log_text(current_raw)}\n\n"
                     f"Context:\n{prompt_context or 'None'}\n\n"
                     f"Please output strictly valid JSON matching schema '{schema_cls.__name__}' "
                     f"without conversational text."

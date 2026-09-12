@@ -9,7 +9,7 @@ import httpx
 from pydantic import BaseModel, ValidationError
 
 from app.core.config import settings
-from app.core.errors import ServiceUnavailableException, ValidationException
+from app.core.errors import ServiceUnavailableException, UnauthorizedException, ValidationException
 from app.ports.embedding import EmbeddingProvider, EmbeddingRequest, EmbeddingResponse
 from app.ports.llm import LLMCompletionRequest, LLMCompletionResponse, LLMProvider
 
@@ -43,7 +43,7 @@ class OpenAIAdapter(LLMProvider, EmbeddingProvider):
         payload: dict[str, Any],
         timeout_seconds: float,
     ) -> dict[str, Any]:
-        """Execute async POST request with 3x exponential backoff retry on transient failure."""
+        """Execute async POST request with retry on transient failure only."""
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
         headers = self._get_headers()
 
@@ -55,21 +55,44 @@ class OpenAIAdapter(LLMProvider, EmbeddingProvider):
                     if response.status_code == 200:
                         return response.json()  # type: ignore[no-any-return]
 
-                    if (
-                        response.status_code in (429, 500, 502, 503, 504)
-                        and attempt < self.max_retries
-                    ):
-                        backoff = 0.5 * (2 ** (attempt - 1))
-                        await asyncio.sleep(backoff)
-                        continue
+                    # Non-transient client errors fail fast immediately without retry
+                    if response.status_code in (401, 403):
+                        raise UnauthorizedException(
+                            f"OpenAI API authentication failed (HTTP {response.status_code})."
+                        )
+                    if response.status_code in (400, 404, 422):
+                        err_text = response.text[:200]
+                        raise ValidationException(
+                            f"OpenAI API invalid request (HTTP {response.status_code}): {err_text}"
+                        )
+
+                    # Transient status codes (429 Rate Limit, 500, 502, 503, 504)
+                    if response.status_code in (429, 500, 502, 503, 504):
+                        response.raise_for_status()
 
                     response.raise_for_status()
-            except (httpx.TimeoutException, httpx.HTTPStatusError, httpx.RequestError) as exc:
+            except (httpx.TimeoutException, httpx.NetworkError) as exc:
                 last_exception = exc
                 if attempt < self.max_retries:
                     backoff = 0.5 * (2 ** (attempt - 1))
                     await asyncio.sleep(backoff)
                     continue
+            except httpx.HTTPStatusError as exc:
+                last_exception = exc
+                status = exc.response.status_code
+                if status in (429, 500, 502, 503, 504) and attempt < self.max_retries:
+                    backoff = 0.5 * (2 ** (attempt - 1))
+                    await asyncio.sleep(backoff)
+                    continue
+                if status in (401, 403):
+                    raise UnauthorizedException(
+                        f"OpenAI API authentication failed (HTTP {status})."
+                    ) from exc
+                if status in (400, 404, 422):
+                    raise ValidationException(
+                        f"OpenAI API invalid request (HTTP {status})."
+                    ) from exc
+                raise ServiceUnavailableException(f"OpenAI API HTTP error {status}") from exc
 
         msg = f"OpenAI API request to '{endpoint}' failed: {last_exception}"
         raise ServiceUnavailableException(msg) from last_exception
@@ -197,6 +220,8 @@ class OpenAIAdapter(LLMProvider, EmbeddingProvider):
             "model": request.model,
             "input": request.texts,
         }
+        if request.dimensions:
+            payload["dimensions"] = request.dimensions
 
         res_json = await self._post_with_retry(
             endpoint="embeddings",
@@ -207,11 +232,14 @@ class OpenAIAdapter(LLMProvider, EmbeddingProvider):
         latency_ms = (time.perf_counter() - start_time) * 1000.0
         data = res_json.get("data", [])
         embeddings = [item.get("embedding", []) for item in data]
+        first_dim = len(embeddings[0]) if embeddings else request.dimensions
         usage = res_json.get("usage", {})
 
         return EmbeddingResponse(
             embeddings=embeddings,
             model=res_json.get("model", request.model),
+            dimensions=first_dim,
+            tenant_id=request.tenant_id,
             prompt_tokens=usage.get("prompt_tokens", 0),
             latency_ms=latency_ms,
         )

@@ -8,41 +8,41 @@ from app.services.ai_cost_tracker import AICostTracker
 
 def test_calculate_cost_gpt_4o_mini() -> None:
     # gpt-4o-mini: prompt $0.15/1M, completion $0.60/1M
-    # 1,000,000 prompt tokens = $0.15
-    # 500,000 completion tokens = $0.30
-    cost = AICostTracker.calculate_cost(
+    cost, is_fallback = AICostTracker.calculate_cost(
         "gpt-4o-mini", prompt_tokens=1_000_000, completion_tokens=500_000
     )
     assert cost == 0.45
+    assert not is_fallback
 
-    # Small token count
-    # 1000 prompt tokens = 0.00015, 500 completion tokens = 0.00030 -> total = 0.00045
-    cost_small = AICostTracker.calculate_cost(
+    cost_small, is_fallback_small = AICostTracker.calculate_cost(
         "gpt-4o-mini", prompt_tokens=1000, completion_tokens=500
     )
     assert cost_small == 0.00045
+    assert not is_fallback_small
 
 
 def test_calculate_cost_gpt_4o() -> None:
-    # gpt-4o: prompt $2.50/1M, completion $10.00/1M
-    # 100,000 prompt tokens = $0.25
-    # 10,000 completion tokens = $0.10
-    cost = AICostTracker.calculate_cost("gpt-4o", prompt_tokens=100_000, completion_tokens=10_000)
+    cost, is_fallback = AICostTracker.calculate_cost(
+        "gpt-4o", prompt_tokens=100_000, completion_tokens=10_000
+    )
     assert cost == 0.35
+    assert not is_fallback
 
 
 def test_calculate_cost_embedding_model() -> None:
-    # text-embedding-3-small: prompt $0.02/1M, completion $0.00
-    cost = AICostTracker.calculate_cost("text-embedding-3-small", prompt_tokens=100_000)
+    cost, is_fallback = AICostTracker.calculate_cost(
+        "text-embedding-3-small", prompt_tokens=100_000
+    )
     assert cost == 0.002
+    assert not is_fallback
 
 
 def test_calculate_cost_unknown_model_fallback() -> None:
-    # Fallback rates: prompt $0.50/1M, completion $1.50/1M
-    cost = AICostTracker.calculate_cost(
+    cost, is_fallback = AICostTracker.calculate_cost(
         "custom-fine-tuned-v1", prompt_tokens=1_000_000, completion_tokens=1_000_000
     )
     assert cost == 2.00
+    assert is_fallback is True
 
 
 def test_track_usage_logging(caplog: pytest.LogCaptureFixture) -> None:
@@ -68,6 +68,7 @@ def test_track_usage_logging(caplog: pytest.LogCaptureFixture) -> None:
     assert getattr(rec, "completion_tokens", None) == 500
     assert getattr(rec, "total_tokens", None) == 2500
     assert getattr(rec, "estimated_cost_usd", None) == 0.0006
+    assert getattr(rec, "is_fallback_pricing", None) is False
     assert getattr(rec, "lead_id", None) == "lead_99"
 
 

@@ -14,6 +14,12 @@ class EmbeddingRequest(BaseModel):
     model: str = Field(
         default="text-embedding-3-small", description="Target vector embedding model identifier"
     )
+    dimensions: int = Field(
+        default=1536, ge=1, description="Target vector dimension size (e.g. 1536)"
+    )
+    tenant_id: str | None = Field(
+        default=None, description="Optional tenant context for telemetry tracing"
+    )
     timeout_seconds: float = Field(
         default=30.0, ge=1.0, description="HTTP request timeout in seconds"
     )
@@ -22,13 +28,13 @@ class EmbeddingRequest(BaseModel):
 class EmbeddingResponse(BaseModel):
     """Normalized output response DTO for vector embedding generation requests."""
 
-    embeddings: list[list[float]] = Field(
-        ..., description="List of 1536-dimensional floating point vector arrays"
-    )
+    embeddings: list[list[float]] = Field(..., description="List of floating point vector arrays")
     model: str = Field(..., description="Actual model string returned by provider")
-    prompt_tokens: int = Field(0, ge=0, description="Total input tokens consumed")
+    dimensions: int = Field(default=1536, ge=1, description="Vector dimension size")
+    tenant_id: str | None = Field(default=None, description="Tenant context ID")
+    prompt_tokens: int = Field(default=0, ge=0, description="Total input tokens consumed")
     latency_ms: float = Field(
-        0.0, ge=0.0, description="Total roundtrip request latency in milliseconds"
+        default=0.0, ge=0.0, description="Total roundtrip request latency in milliseconds"
     )
 
 
