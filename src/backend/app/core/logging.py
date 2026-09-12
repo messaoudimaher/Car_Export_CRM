@@ -117,7 +117,10 @@ class JSONLogFormatter(logging.Formatter):
                 "threadName",
             }:
                 # Sanitize sensitive fields
-                if any(sensitive in key.lower() for sensitive in self.SENSITIVE_KEYS):
+                key_lower = key.lower()
+                if any(
+                    sensitive in key_lower for sensitive in self.SENSITIVE_KEYS
+                ) and not key_lower.endswith("_tokens"):
                     log_data[key] = "[REDACTED]"
                 else:
                     log_data[key] = value
