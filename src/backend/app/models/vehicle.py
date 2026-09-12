@@ -12,6 +12,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
 
 if TYPE_CHECKING:
+    from app.models.quotation import Quotation
     from app.models.tenant import Tenant
 
 
@@ -138,6 +139,11 @@ class Vehicle(Base):
     tenant: Mapped["Tenant"] = relationship(
         "Tenant",
         back_populates="vehicles",
+    )
+
+    quotations: Mapped[list["Quotation"]] = relationship(
+        "Quotation",
+        back_populates="vehicle",
     )
 
     def __init__(self, **kw: object) -> None:

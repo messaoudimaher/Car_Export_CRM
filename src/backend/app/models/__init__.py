@@ -6,6 +6,12 @@ from app.models.customer import Customer
 from app.models.inbound_message import InboundMessage
 from app.models.lead import Lead, LeadPriority, LeadStatus, LostReason
 from app.models.message import Message
+from app.models.quotation import (
+    Quotation,
+    QuotationApprovalStatus,
+    QuotationItem,
+    QuotationStatus,
+)
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
 from app.models.vehicle import VATRegime, Vehicle, VehicleStatus
@@ -21,6 +27,10 @@ __all__ = [
     "LeadStatus",
     "LostReason",
     "Message",
+    "Quotation",
+    "QuotationApprovalStatus",
+    "QuotationItem",
+    "QuotationStatus",
     "Tenant",
     "TimestampMixin",
     "User",

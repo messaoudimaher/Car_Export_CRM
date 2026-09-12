@@ -13,6 +13,7 @@ from app.models.base import Base
 
 if TYPE_CHECKING:
     from app.models.customer import Customer
+    from app.models.quotation import Quotation
     from app.models.tenant import Tenant
     from app.models.user import User
     from app.models.vehicle_request import VehicleRequest
@@ -146,6 +147,12 @@ class Lead(Base):
     assigned_agent: Mapped["User | None"] = relationship(
         "User",
         back_populates="assigned_leads",
+    )
+
+    quotations: Mapped[list["Quotation"]] = relationship(
+        "Quotation",
+        back_populates="lead",
+        cascade="all, delete-orphan",
     )
 
     def __init__(self, **kw: object) -> None:
