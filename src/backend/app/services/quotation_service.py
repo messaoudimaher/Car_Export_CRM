@@ -119,6 +119,7 @@ class QuotationService:
         )
 
         for item_obj in item_objects:
+            item_obj.quotation_id = quotation.id
             quotation.items.append(item_obj)
 
         self.session.add(quotation)

@@ -35,16 +35,19 @@ class QuotationItemRead(BaseModel):
         """Convert QuotationItem ORM entity to response schema."""
         unit_cents = getattr(item, "unit_price_cents", 0)
         total_cents = getattr(item, "total_price_cents", 0)
+        item_id = item.id or uuid.uuid4()
+        q_id = item.quotation_id or uuid.uuid4()
+        created_at = item.created_at or datetime.datetime.now(datetime.UTC)
         return cls(
-            id=item.id,
-            quotation_id=item.quotation_id,
+            id=item_id,
+            quotation_id=q_id,
             description=item.description,
             unit_price_cents=unit_cents,
             unit_price_eur=(Decimal(unit_cents) / Decimal("100")).quantize(Decimal("0.01")),
             quantity=getattr(item, "quantity", 1),
             total_price_cents=total_cents,
             total_price_eur=(Decimal(total_cents) / Decimal("100")).quantize(Decimal("0.01")),
-            created_at=item.created_at,
+            created_at=created_at,
         )
 
 
