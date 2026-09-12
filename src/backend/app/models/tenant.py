@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from app.models.lead import Lead
     from app.models.message import Message
     from app.models.user import User
+    from app.models.vehicle import Vehicle
     from app.models.vehicle_request import VehicleRequest
     from app.models.whatsapp_account import WhatsAppAccount
 
@@ -89,6 +90,12 @@ class Tenant(Base):
 
     leads: Mapped[list["Lead"]] = relationship(
         "Lead",
+        back_populates="tenant",
+        cascade="all, delete-orphan",
+    )
+
+    vehicles: Mapped[list["Vehicle"]] = relationship(
+        "Vehicle",
         back_populates="tenant",
         cascade="all, delete-orphan",
     )
