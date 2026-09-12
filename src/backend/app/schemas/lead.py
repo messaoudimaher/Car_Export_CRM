@@ -75,3 +75,36 @@ class LeadListEnvelope(BaseModel):
     success: bool = True
     data: list[LeadResponse]
     meta: LeadListMeta
+
+
+class ConfirmAIVehicleRequest(BaseModel):
+    """Payload schema for human confirmation of Layer 2 AI vehicle extraction (INV-003)."""
+
+    ai_understanding_id: uuid.UUID | None = Field(
+        None, description="Provisional AI understanding UUID"
+    )
+    make: str = Field(..., max_length=50, description="Confirmed vehicle manufacturer brand")
+    model: str = Field(..., max_length=50, description="Confirmed vehicle model name")
+    min_year: int | None = Field(None, ge=1900, le=2100, description="Minimum manufacture year")
+    max_year: int | None = Field(None, ge=1900, le=2100, description="Maximum manufacture year")
+    fuel_type: str | None = Field(None, max_length=20, description="Engine fuel classification")
+    transmission: str | None = Field(
+        None, max_length=20, description="Transmission gearbox classification"
+    )
+    max_mileage_km: int | None = Field(None, ge=0, description="Maximum mileage in km")
+    budget_eur: float | int | str | None = Field(None, description="Sourcing budget in EUR")
+    destination_port: str = Field("Rades", max_length=50, description="Tunisia destination port")
+
+
+class ConfirmAIVehicleRequestResponse(BaseModel):
+    """Response payload containing confirmed VehicleRequest and updated Lead."""
+
+    vehicle_request: dict[str, object]
+    lead: LeadResponse
+
+
+class ConfirmAIVehicleRequestEnvelope(BaseModel):
+    """Envelope for AI vehicle request confirmation endpoint response."""
+
+    success: bool = True
+    data: ConfirmAIVehicleRequestResponse

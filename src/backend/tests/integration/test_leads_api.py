@@ -179,3 +179,65 @@ async def test_leads_unrecognized_query_param_returns_422(
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
         json_resp = response.json()
         assert "Unrecognized query parameter" in json_resp["detail"]
+
+
+@pytest.mark.asyncio
+async def test_confirm_ai_vehicle_request_api_endpoint(
+    app: FastAPI, sales_agent_user: CurrentUser
+) -> None:
+    """Verify POST /api/v1/leads/{id}/vehicle-request/confirm creates VehicleRequest (INV-003)."""
+    if not await check_database_health():
+        pytest.skip("PostgreSQL database is not reachable")
+
+    app.dependency_overrides[get_current_user] = lambda: sales_agent_user
+
+    async for session in get_db_session():
+        tenant = Tenant(
+            id=sales_agent_user.tenant_id,
+            name="Delta HITL Motors",
+            slug=f"delta-hitl-{uuid.uuid4().hex[:8]}",
+        )
+        session.add(tenant)
+        await session.flush()
+
+        customer = Customer(
+            tenant_id=tenant.id,
+            phone_e164=f"+2169{uuid.uuid4().int % 10000000:07d}",
+            full_name="Nabil Karoui",
+            tenant=tenant,
+        )
+        session.add(customer)
+        await session.commit()
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://testserver"
+        ) as client:
+            # 1. Create Lead in New stage
+            create_resp = await client.post(
+                "/api/v1/leads",
+                json={"customer_id": str(customer.id)},
+            )
+            lead_id = create_resp.json()["data"]["id"]
+
+            # 2. Call HITL Confirmation endpoint
+            confirm_payload = {
+                "ai_understanding_id": str(uuid.uuid4()),
+                "make": "Peugeot",
+                "model": "3008",
+                "min_year": 2022,
+                "fuel_type": "Diesel",
+                "budget_eur": "21000.00",
+            }
+            confirm_resp = await client.post(
+                f"/api/v1/leads/{lead_id}/vehicle-request/confirm",
+                json=confirm_payload,
+            )
+            assert confirm_resp.status_code == status.HTTP_200_OK
+            json_resp = confirm_resp.json()
+            assert json_resp["success"] is True
+            data = json_resp["data"]
+            assert data["vehicle_request"]["is_human_validated"] is True
+            assert data["vehicle_request"]["make"] == "Peugeot"
+            assert data["lead"]["id"] == lead_id
+            assert data["lead"]["status"] == LeadStatus.QUALIFIED.value
+        break

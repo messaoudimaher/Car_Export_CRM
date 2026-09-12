@@ -12,6 +12,9 @@ from app.core.errors import NotFoundException, ValidationException
 from app.models.customer import Customer
 from app.models.lead import Lead, LeadPriority, LeadStatus
 from app.schemas.lead import (
+    ConfirmAIVehicleRequest,
+    ConfirmAIVehicleRequestEnvelope,
+    ConfirmAIVehicleRequestResponse,
     LeadCreate,
     LeadEnvelope,
     LeadListEnvelope,
@@ -19,6 +22,8 @@ from app.schemas.lead import (
     LeadResponse,
     LeadStageUpdate,
 )
+from app.schemas.vehicle_request import VehicleRequestResponse
+from app.services.ai_confirmation_service import ai_confirmation_service
 from app.services.lead_service import lead_service
 from app.utils.pagination import decode_cursor, encode_cursor
 
@@ -194,3 +199,35 @@ async def update_lead_stage(
     await session.refresh(lead)
 
     return LeadEnvelope(success=True, data=LeadResponse.model_validate(lead))
+
+
+@router.post(
+    "/{id}/vehicle-request/confirm",
+    response_model=ConfirmAIVehicleRequestEnvelope,
+    status_code=status.HTTP_200_OK,
+)
+async def confirm_ai_vehicle_request(
+    id: UUID,
+    payload: ConfirmAIVehicleRequest,
+    tenant_id: UUID = Depends(get_current_tenant_id),
+    session: AsyncSession = Depends(get_db_session),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ConfirmAIVehicleRequestEnvelope:
+    """Human Confirmation Endpoint (INV-003, ADR 0012).
+
+    Validates or edits Layer 2 AI output to create an authoritative VehicleRequest
+    with is_human_validated = True, links it to Lead, and advances Lead stage to Qualified.
+    """
+    vreq, updated_lead = await ai_confirmation_service.confirm_ai_vehicle_request(
+        db=session,
+        tenant_id=tenant_id,
+        lead_id=id,
+        user_id=current_user.user_id,
+        payload=payload,
+    )
+
+    resp_data = ConfirmAIVehicleRequestResponse(
+        vehicle_request=VehicleRequestResponse.model_validate(vreq).model_dump(),
+        lead=LeadResponse.model_validate(updated_lead),
+    )
+    return ConfirmAIVehicleRequestEnvelope(success=True, data=resp_data)
