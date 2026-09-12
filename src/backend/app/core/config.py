@@ -64,6 +64,11 @@ class Settings(BaseSettings):
 
     # AI / LLM Configuration
     LLM_PROVIDER: str = Field(default="openai", description="Default LLM Provider Vendor")
+    LLM_DEFAULT_MODEL: str = Field(
+        default="gpt-4o-mini",
+        validation_alias=AliasChoices("LLM_DEFAULT_MODEL", "OPENAI_MODEL"),
+        description="Default LLM model name",
+    )
     LLM_PROVIDER_API_KEY: str = Field(
         default="dev_llm_key_placeholder",
         validation_alias=AliasChoices("LLM_PROVIDER_API_KEY", "OPENAI_API_KEY"),
@@ -72,6 +77,11 @@ class Settings(BaseSettings):
     EMBEDDING_PROVIDER_API_KEY: str = Field(
         default="dev_embedding_key_placeholder", description="Embedding Provider API Key"
     )
+
+    @property
+    def OPENAI_MODEL(self) -> str:
+        """Alias for LLM_DEFAULT_MODEL for OpenAI adapter compatibility."""
+        return self.LLM_DEFAULT_MODEL
 
     @property
     def OPENAI_API_KEY(self) -> str:

@@ -108,3 +108,13 @@ def test_jwt_secret_key_alias_resolution(monkeypatch: pytest.MonkeyPatch) -> Non
 
     settings = Settings()
     assert settings.JWT_SECRET == "alias_secret_key_environment_variable_32_bytes"  # noqa: S105
+
+
+def test_llm_model_alias_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify OPENAI_MODEL environment variable populates canonical LLM_DEFAULT_MODEL attribute."""
+    monkeypatch.setenv("OPENAI_MODEL", "gpt-4o")
+    monkeypatch.delenv("LLM_DEFAULT_MODEL", raising=False)
+
+    settings = Settings()
+    assert settings.LLM_DEFAULT_MODEL == "gpt-4o"
+    assert settings.OPENAI_MODEL == "gpt-4o"
