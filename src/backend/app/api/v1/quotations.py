@@ -263,14 +263,7 @@ async def send_quotation(
         expiration_seconds=86400,
     )
 
-    # 3. Update quote status to Sent
-    updated_quote = await quote_service.mark_as_sent(
-        tenant_id=tenant_id,
-        quotation_id=quotation_id,
-        pdf_s3_key=doc.object_key,
-    )
-
-    # 4. Fetch customer phone number
+    # 3. Fetch customer phone number
     lead_query = select(Lead).where(Lead.id == quotation.lead_id)
     lead_res = await db.execute(lead_query)
     lead = lead_res.scalar_one_or_none()
@@ -283,12 +276,12 @@ async def send_quotation(
         if customer and customer.phone_e164:
             recipient_phone = customer.phone_e164
 
-    # 5. Dispatch via WhatsAppProvider
+    # 4. Dispatch via WhatsAppProvider (MUST succeed before updating status to Sent)
     message_text = (
         f"Bonjour,\n\nVoici votre devis d'exportation automobile "
-        f"{updated_quote.quote_number}:\n"
-        f"Montant Total: € {Decimal(updated_quote.total_price_cents) / Decimal('100'):,.2f}\n"
-        f"Estimation Douane Tunisie: TND {updated_quote.customs_estimate_tnd:,.3f}\n\n"
+        f"{quotation.quote_number}:\n"
+        f"Montant Total: € {Decimal(quotation.total_price_cents) / Decimal('100'):,.2f}\n"
+        f"Estimation Douane Tunisie: TND {quotation.customs_estimate_tnd:,.3f}\n\n"
         f"Téléchargez votre PDF sécurisé: {access_url}\n\n"
         f"Offre valable 30 jours."
     )
@@ -297,6 +290,13 @@ async def send_quotation(
         phone_number_id="business_phone_id",
         recipient_e164=recipient_phone,
         text_body=message_text,
+    )
+
+    # 5. Mark quote status as Sent in DB ONLY after successful WhatsApp dispatch
+    updated_quote = await quote_service.mark_as_sent(
+        tenant_id=tenant_id,
+        quotation_id=quotation_id,
+        pdf_s3_key=doc.object_key,
     )
 
     return QuotationSendResponse(

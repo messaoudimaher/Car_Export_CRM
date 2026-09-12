@@ -807,12 +807,15 @@ Per `AGENTS.md`, explicit **Human Approval** is strictly required before executi
 #### `TASK-1501`: Document Metadata Model & Private S3 Bucket Integration (`BR-013`)
 - **Workstream**: `WS-15` | **Priority**: P0 (Must Have) | **Risk**: High | **Parallelization**: Sequential
 - **Objective**: Implement `Document` model and private AWS S3 bucket integration for export files (*Carte Grise*, *FCR* certs) (`BR-013`).
-- **Description**: Implement `app/models/document.py` and `app/services/storage_service.py`. Bucket configured with `block-public-access = true`. Generate 15-minute pre-signed upload/download URLs (`INV-008`). Record SHA-256 checksum and scan status (`Pending`).
+- **Description**: Implement `app/models/document.py` and `app/services/storage_service.py`. S3 bucket configured with `block-public-access = true`, Server-Side Encryption at rest (SSE-S3 / KMS), lifecycle retention rules (automated archiving and purging), backup/restore strategy with point-in-time recovery, restricted IAM credentials with automated key rotation, short-lived authorized pre-signed access URLs (15-minute expiration), zero public CORS defaults, and storage reconciliation for decoupled DB and storage transaction failures.
 - **Dependencies**: `TASK-0102`, `TASK-0302` | **Blocks**: `TASK-1502`
 - **Affected Files**: `src/backend/app/models/document.py`, `src/backend/app/services/storage_service.py`
 - **Architecture References**: `BR-013`, `INV-008`, `SECURITY.md` Section 14
 - **Acceptance Criteria**:
-  - S3 object access restricted strictly to 15-minute pre-signed URLs.
+  - S3 object access restricted strictly to private bucket policies and 15-minute pre-signed access URLs.
+  - Encryption at rest (SSE-S3/KMS) and zero public CORS enforced.
+  - Automated lifecycle retention rules and backup/restore policy defined.
+  - Storage reconciliation job handles orphaned upload/DB failure states.
   - File upload records SHA-256 hash.
 - **Required Tests**: Integration test with LocalStack/mock S3 generating and verifying pre-signed URLs.
 - **Definition of Done**: Document model and S3 storage service verified.

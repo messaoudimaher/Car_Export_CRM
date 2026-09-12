@@ -257,3 +257,60 @@ async def test_send_unapproved_quotation_blocks_dispatch() -> None:
         assert response.status_code == 403
         error = response.json()
         assert "pending manager discount approval" in error["detail"]
+
+
+@pytest.mark.asyncio
+async def test_send_rejected_quotation_blocks_dispatch() -> None:
+    """Verify POST /api/v1/quotes/{id}/send blocks dispatch for rejected quotes (BR-015)."""
+    mock_session = AsyncMock()
+    app = create_quotation_test_app(mock_session)
+
+    user_id = uuid.uuid4()
+    tenant_id = uuid.uuid4()
+    quote_id = uuid.uuid4()
+
+    user = User(
+        id=user_id,
+        tenant_id=tenant_id,
+        email="agent@export.de",
+        password_hash="pwd_hash",  # noqa: S106
+        role=UserRole.SALES_AGENT.value,
+        is_active=True,
+    )
+    rejected_quote = Quotation(
+        id=quote_id,
+        tenant_id=tenant_id,
+        lead_id=uuid.uuid4(),
+        quote_number="QT-2026-REJECTED",
+        vat_regime=VATRegime.NETTO_EXPORT.value,
+        vehicle_price_cents=3000000,
+        shipping_fee_cents=100000,
+        customs_estimate_tnd=Decimal("4500.000"),
+        total_price_cents=2790000,
+        status=QuotationStatus.REJECTED.value,
+        approval_status=QuotationApprovalStatus.REJECTED.value,
+    )
+
+    mock_session.get.return_value = user
+
+    def mock_execute(stmt: object, *args: object, **kwargs: object) -> MagicMock:
+        res = MagicMock()
+        stmt_str = str(stmt)
+        if "FROM quotations" in stmt_str:
+            res.scalar_one_or_none.return_value = rejected_quote
+        else:
+            res.scalar_one_or_none.return_value = None
+        return res
+
+    mock_session.execute.side_effect = mock_execute
+
+    token = create_access_token(user_id, tenant_id, role=UserRole.SALES_AGENT.value)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            f"/api/v1/quotes/{quote_id}/send",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 403
+        error = response.json()
+        assert "Cannot dispatch a rejected quotation" in error["detail"]
