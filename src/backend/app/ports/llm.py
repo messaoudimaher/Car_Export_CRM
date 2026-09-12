@@ -34,14 +34,16 @@ class LLMCompletionResponse(BaseModel):
 
     content: str = Field(..., description="Generated text content or raw JSON response string")
     model: str = Field(..., description="Actual model string returned by provider")
-    prompt_tokens: int = Field(0, ge=0, description="Number of tokens in prompt input")
-    completion_tokens: int = Field(0, ge=0, description="Number of tokens generated in completion")
-    total_tokens: int = Field(0, ge=0, description="Total tokens consumed")
+    prompt_tokens: int = Field(default=0, ge=0, description="Number of tokens in prompt input")
+    completion_tokens: int = Field(
+        default=0, ge=0, description="Number of tokens generated in completion"
+    )
+    total_tokens: int = Field(default=0, ge=0, description="Total tokens consumed")
     latency_ms: float = Field(
-        0.0, ge=0.0, description="Total roundtrip request latency in milliseconds"
+        default=0.0, ge=0.0, description="Total roundtrip request latency in milliseconds"
     )
     finish_reason: str = Field(
-        "stop", description="Completion termination reason (stop, length, etc.)"
+        default="stop", description="Completion termination reason (stop, length, etc.)"
     )
     raw_response: dict[str, Any] = Field(
         default_factory=dict, description="Raw provider JSON payload"

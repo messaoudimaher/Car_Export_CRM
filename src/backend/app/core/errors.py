@@ -110,6 +110,28 @@ class ValidationException(AppException):
         )
 
 
+class AISchemaValidationException(ValidationException):
+    """Exception raised when raw LLM output fails Layer 2 Pydantic schema validation (ADR 0012)."""
+
+    def __init__(
+        self,
+        message: str = "AI output failed Layer 2 schema validation.",
+        detail: str | None = None,
+        invalid_params: list[dict[str, Any]] | None = None,
+        raw_output: str | None = None,
+        attempts: int = 1,
+    ) -> None:
+        super().__init__(
+            message=message,
+            detail=detail or message,
+            invalid_params=invalid_params,
+        )
+        self.type_uri = "https://errors.carexportcrm.com/ai-schema-validation-error"
+        self.title = "AI Schema Validation Error"
+        self.raw_output = raw_output
+        self.attempts = attempts
+
+
 class ConflictException(AppException):
     """Resource state conflict exception (HTTP 409)."""
 
