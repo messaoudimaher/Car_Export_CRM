@@ -178,3 +178,52 @@ class QuotationService:
         quotation.status = QuotationStatus.REJECTED.value
         await self.session.flush()
         return quotation
+
+    async def list_quotations(
+        self,
+        tenant_id: uuid.UUID,
+        lead_id: uuid.UUID | None = None,
+        status: str | None = None,
+        limit: int = 25,
+        offset: int = 0,
+    ) -> Sequence[Quotation]:
+        """List quotations scoped to tenant with optional lead_id and status filters."""
+        stmt = (
+            select(Quotation)
+            .options(selectinload(Quotation.items))
+            .where(Quotation.tenant_id == tenant_id)
+            .order_by(Quotation.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        if lead_id is not None:
+            stmt = stmt.where(Quotation.lead_id == lead_id)
+        if status is not None:
+            stmt = stmt.where(Quotation.status == status)
+
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
+    async def mark_as_sent(
+        self,
+        tenant_id: uuid.UUID,
+        quotation_id: uuid.UUID,
+        pdf_s3_key: str,
+    ) -> Quotation:
+        """Update quotation status to Sent and attach PDF storage key (BR-003)."""
+        quotation = await self.get_quotation_by_id(tenant_id, quotation_id)
+        if quotation is None:
+            raise NotFoundException(f"Quotation with ID '{quotation_id}' not found")
+
+        # BR-015: Enforce that quotes requiring manager approval must be Approved before sending
+        if quotation.approval_status == QuotationApprovalStatus.PENDING_APPROVAL.value:
+            raise ForbiddenException(
+                "Cannot dispatch quote pending manager discount approval (BR-015)"
+            )
+        if quotation.approval_status == QuotationApprovalStatus.REJECTED.value:
+            raise ValidationException("Cannot dispatch a rejected quotation")
+
+        quotation.status = QuotationStatus.SENT.value
+        quotation.pdf_s3_key = pdf_s3_key
+        await self.session.flush()
+        return quotation

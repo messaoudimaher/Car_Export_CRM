@@ -6,6 +6,8 @@ from app.api.v1.conversations import router as conversations_router
 from app.api.v1.customers import router as customers_router
 from app.api.v1.health import router as health_router
 from app.api.v1.leads import router as leads_router
+from app.api.v1.quotations import alias_router as quotations_alias_router
+from app.api.v1.quotations import router as quotations_router
 from app.api.v1.vehicle_requests import router as vehicle_requests_router
 from app.api.v1.vehicles import router as vehicles_router
 from app.api.v1.webhooks import router as webhooks_router
@@ -20,5 +22,7 @@ api_v1_router.include_router(conversations_router)
 api_v1_router.include_router(leads_router)
 api_v1_router.include_router(vehicle_requests_router)
 api_v1_router.include_router(vehicles_router)
+api_v1_router.include_router(quotations_router)
+api_v1_router.include_router(quotations_alias_router)
 api_v1_router.include_router(webhooks_router)
 api_v1_router.include_router(websocket_router)
