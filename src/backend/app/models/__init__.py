@@ -1,5 +1,6 @@
 """Models package re-exporting Base declarative models and entity classes."""
 
+from app.models.ai_suggestion import AISuggestion, AISuggestionStatus
 from app.models.ai_understanding import (
     AIUnderstanding,
     AIUnderstandingIntent,
@@ -25,6 +26,8 @@ from app.models.vehicle_request import VehicleRequest
 from app.models.whatsapp_account import WhatsAppAccount
 
 __all__ = [
+    "AISuggestion",
+    "AISuggestionStatus",
     "AIUnderstanding",
     "AIUnderstandingIntent",
     "AIUnderstandingStatus",
