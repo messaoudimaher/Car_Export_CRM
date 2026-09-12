@@ -1,5 +1,4 @@
-"""Application ports package re-exporting abstract interfaces and DTO contracts."""
-
+from app.ports.object_storage import ObjectStorageProvider
 from app.ports.whatsapp import (
     OutboundWhatsAppMessageResult,
     WhatsAppMessage,
@@ -7,6 +6,7 @@ from app.ports.whatsapp import (
 )
 
 __all__ = [
+    "ObjectStorageProvider",
     "WhatsAppProvider",
     "WhatsAppMessage",
     "OutboundWhatsAppMessageResult",

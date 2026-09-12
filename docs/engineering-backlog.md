@@ -600,18 +600,24 @@ Per `AGENTS.md`, explicit **Human Approval** is strictly required before executi
 - **Required Tests**: Unit tests for tax engine versioning, exact cent duty calculations, discount threshold approvals, and customs disclaimers.
 - **Definition of Done**: QuotationService and deterministic tax engine business rules verified.
 
-#### `TASK-1003`: PDF Quote Generation Service & Private S3 Upload
+#### `TASK-1003`: PDF Quote Generation & Private Object Storage
 - **Workstream**: `WS-10` | **Priority**: P0 (Must Have) | **Risk**: High | **Parallelization**: Parallel-after-contract
-- **Objective**: Implement PDF quote generator emitting branded FCR/Export quote documents and uploading to private S3 storage.
-- **Description**: Implement `app/services/pdf_service.py` using `WeasyPrint` or `ReportLab`. Render quote template with vehicle specs, VAT regime breakdown, customs estimate notice, and company branding. Upload generated PDF to S3 under `tenants/<tenant_id>/quotes/`.
+- **Objective**: Implement a production-quality PDF quote generation service that creates branded, auditable FCR/export quotation documents and stores them through the application's provider-agnostic `ObjectStorageProvider`.
+- **Description**: Implement a PDF generation service using an approved rendering library such as ReportLab or WeasyPrint. The generated quote must include quote identifier, issue date, tenant/company branding, customer info, vehicle specs, purchase price and currency, VAT regime and deterministic tax breakdown, customs estimate notice (clearly marked as estimate), quote validity period, terms, disclaimers, and human-review status. Store generated PDFs through `ObjectStorageProvider`. Local development and automated tests MUST work without AWS credentials or paid third-party services. Use MinIO or local S3-compatible storage for local MVP. Store PDF binaries in private object storage, metadata and object key in database under `tenants/<tenant_id>/quotes/<quote_id>/<version>.pdf`. Prevent path traversal and unsafe key construction. Record audit events and support idempotent generation.
 - **Dependencies**: `TASK-1002`, `TASK-1501` | **Blocks**: `TASK-1004`
-- **Affected Files**: `src/backend/app/services/pdf_service.py`, `src/backend/app/templates/quote.html`
-- **Architecture References**: `BR-005`, `BR-006`, `BR-013`, `INV-008`
+- **Affected Files**: `src/backend/app/services/pdf_service.py`, `src/backend/app/templates/quote.html`, object storage adapter/port files, document/quote schemas/models, integration and security tests
+- **Architecture References**: `BR-005`, `BR-006`, `BR-013`, `INV-008`, `ADR-0018`
 - **Acceptance Criteria**:
-  - Generates valid PDF file matching professional export quote template.
-  - Uploads PDF to private S3 bucket and returns document metadata ID.
-- **Required Tests**: Integration test generating quote PDF and validating PDF structure & S3 upload.
-- **Definition of Done**: PDF quote generation service operational.
+  - Generates valid PDF using authoritative quote data matching professional export template.
+  - Monetary values use exact decimal handling and explicit currency.
+  - VAT and customs info is deterministic, traceable, and clearly labelled.
+  - Uploads successfully through `ObjectStorageProvider` with MinIO for local execution (no AWS credentials required).
+  - Stores document metadata and object key in PostgreSQL.
+  - Keeps object private with short-lived authorized access.
+  - Enforces tenant isolation and RBAC.
+  - Supports idempotent generation, safe retry behavior, and audit logging.
+- **Required Tests**: PDF generation validity, decimal/VAT rendering, MinIO upload & retrieval, provider contract tests, tenant isolation & RBAC, private object access control, path traversal prevention, idempotency & duplicate generation, failure/reconciliation, audit-log verification, and no-AWS-credentials execution test.
+- **Definition of Done**: PDF quote generation implemented through provider abstraction, works locally with MinIO, supports S3 deployment, passes unit/integration/security tests.
 
 #### `TASK-1004`: Quotation REST API Endpoints & Dispatch Approval
 - **Workstream**: `WS-10` | **Priority**: P0 (Must Have) | **Risk**: Medium | **Parallelization**: Parallel-after-contract

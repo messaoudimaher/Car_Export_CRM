@@ -10,6 +10,7 @@ from app.models.base import Base
 if TYPE_CHECKING:
     from app.models.conversation import WhatsAppConversation
     from app.models.customer import Customer
+    from app.models.document import Document
     from app.models.inbound_message import InboundMessage
     from app.models.lead import Lead
     from app.models.message import Message
@@ -103,6 +104,12 @@ class Tenant(Base):
 
     quotations: Mapped[list["Quotation"]] = relationship(
         "Quotation",
+        back_populates="tenant",
+        cascade="all, delete-orphan",
+    )
+
+    documents: Mapped[list["Document"]] = relationship(
+        "Document",
         back_populates="tenant",
         cascade="all, delete-orphan",
     )

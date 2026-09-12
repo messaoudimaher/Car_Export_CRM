@@ -22,6 +22,7 @@ from app.models.base import Base
 from app.models.vehicle import VATRegime
 
 if TYPE_CHECKING:
+    from app.models.document import Document
     from app.models.lead import Lead
     from app.models.tenant import Tenant
     from app.models.vehicle import Vehicle
@@ -206,6 +207,12 @@ class Quotation(Base):
 
     items: Mapped[list["QuotationItem"]] = relationship(
         "QuotationItem",
+        back_populates="quotation",
+        cascade="all, delete-orphan",
+    )
+
+    documents: Mapped[list["Document"]] = relationship(
+        "Document",
         back_populates="quotation",
         cascade="all, delete-orphan",
     )

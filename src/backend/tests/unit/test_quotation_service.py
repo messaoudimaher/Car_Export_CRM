@@ -47,7 +47,7 @@ async def test_create_quotation_auto_approved_success() -> None:
             vehicle_id=vehicle.id,
             vat_regime=VATRegime.NETTO_EXPORT.value,
             vehicle_price_cents=3800000,  # €38,000.00
-            shipping_fee_cents=150000,   # €1,500.00
+            shipping_fee_cents=150000,  # €1,500.00
             items=[
                 ItemCreateParams(
                     description="Export Preparation", unit_price_cents=50000, quantity=1
