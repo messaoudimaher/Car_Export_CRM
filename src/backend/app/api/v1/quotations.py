@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.object_storage_local import LocalStorageAdapter
 from app.adapters.whatsapp_demo import DemoWhatsAppProvider
-from app.api.deps import CurrentUser, get_current_tenant_id
+from app.api.deps import CurrentUser, get_current_tenant_id, get_current_user
 from app.core.database import get_db_session
 from app.core.errors import ForbiddenException, NotFoundException
 from app.models.customer import Customer
@@ -132,7 +132,7 @@ async def get_quotation(
 )
 async def approve_quotation(
     quotation_id: uuid.UUID,
-    current_user: CurrentUser,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
     tenant_id: Annotated[uuid.UUID, Depends(get_current_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> QuotationDetailRead:
@@ -174,7 +174,7 @@ async def approve_quotation(
 )
 async def reject_quotation(
     quotation_id: uuid.UUID,
-    current_user: CurrentUser,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
     tenant_id: Annotated[uuid.UUID, Depends(get_current_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> QuotationDetailRead:
@@ -216,7 +216,7 @@ async def reject_quotation(
 )
 async def send_quotation(
     quotation_id: uuid.UUID,
-    current_user: CurrentUser,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
     tenant_id: Annotated[uuid.UUID, Depends(get_current_tenant_id)],
     db: Annotated[AsyncSession, Depends(get_db_session)],
     storage: Annotated[ObjectStorageProvider, Depends(get_storage_adapter)],
