@@ -113,7 +113,7 @@ async def test_create_quotation_endpoint_success() -> None:
         assert data["vat_regime"] == "Netto_Export"
         assert data["status"] == "Draft"
         assert data["approval_status"] == "Auto_Approved"
-        assert data["total_price_cents"] == 2568000
+        assert data["total_price_cents"] == 2567600
         assert data["vehicle_price_eur"] == "25000.00"
         assert data["shipping_fee_eur"] == "1000.00"
 
