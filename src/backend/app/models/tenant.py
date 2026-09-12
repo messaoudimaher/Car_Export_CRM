@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
 
 if TYPE_CHECKING:
+    from app.models.ai_understanding import AIUnderstanding
     from app.models.conversation import WhatsAppConversation
     from app.models.customer import Customer
     from app.models.document import Document
@@ -110,6 +111,12 @@ class Tenant(Base):
 
     documents: Mapped[list["Document"]] = relationship(
         "Document",
+        back_populates="tenant",
+        cascade="all, delete-orphan",
+    )
+
+    ai_understandings: Mapped[list["AIUnderstanding"]] = relationship(
+        "AIUnderstanding",
         back_populates="tenant",
         cascade="all, delete-orphan",
     )
