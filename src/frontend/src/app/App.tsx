@@ -2,6 +2,7 @@ import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Car, MessageSquare, Users, FileText, CheckCircle2, ShieldCheck } from "lucide-react";
+import { ToastContainer } from "../shared/components/feedback/ToastContainer";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -93,6 +94,7 @@ export const App: React.FC = () => {
         <Routes>
           <Route path="*" element={<OperationalShell />} />
         </Routes>
+        <ToastContainer />
       </BrowserRouter>
     </QueryClientProvider>
   );
