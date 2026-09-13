@@ -5,10 +5,11 @@ from unittest.mock import AsyncMock
 
 from fastapi import FastAPI
 from httpx import AsyncClient
-from app.models.tenant import Tenant
-from app.models.user import User, UserRole
+
 from app.adapters.llm_demo import DemoLLMAdapter
 from app.adapters.whatsapp_demo import DemoWhatsAppProvider
+from app.models.tenant import Tenant
+from app.models.user import User, UserRole
 
 
 def test_conftest_app_fixture(app: FastAPI) -> None:

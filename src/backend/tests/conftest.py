@@ -13,12 +13,12 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.adapters.llm_demo import DemoLLMAdapter
+from app.adapters.whatsapp_demo import DemoWhatsAppProvider
 from app.core.security import create_access_token
 from app.main import create_app
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
-from app.adapters.llm_demo import DemoLLMAdapter
-from app.adapters.whatsapp_demo import DemoWhatsAppProvider
 
 
 @pytest.fixture

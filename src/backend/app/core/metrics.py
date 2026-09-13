@@ -4,15 +4,14 @@ Exposes system, application, database, HTTP, and operational CRM metrics
 in standard Prometheus text exposition format.
 """
 
-from typing import Any
 from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    REGISTRY,
+    CollectorRegistry,
     Counter,
     Gauge,
     Histogram,
-    CollectorRegistry,
-    REGISTRY,
     generate_latest,
-    CONTENT_TYPE_LATEST,
 )
 
 # Registry reference

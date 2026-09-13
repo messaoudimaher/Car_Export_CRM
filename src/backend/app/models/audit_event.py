@@ -102,6 +102,7 @@ class AuditEvent(Base):
 
 
 from sqlalchemy import event
+
 from app.core.errors import DeveloperSecurityException
 
 

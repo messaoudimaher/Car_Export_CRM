@@ -2,6 +2,7 @@
 
 import pytest
 from sqlalchemy import text
+
 from app.core.database import async_session_factory
 
 

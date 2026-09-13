@@ -59,15 +59,7 @@ def test_json_formatter_redacts_nested_extra_context() -> None:
         args=(),
         exc_info=None,
     )
-    setattr(
-        record,
-        "request_body",
-        {
-            "email": "user@tenant1.com",
-            "password": "my_super_secret_password_123",
-            "api_key": "sk_test_999888",
-        },
-    )
+    record.request_body = {"email": "user@tenant1.com", "password": "my_super_secret_password_123", "api_key": "sk_test_999888"}
 
     formatted_json = formatter.format(record)
     parsed = json.loads(formatted_json)
