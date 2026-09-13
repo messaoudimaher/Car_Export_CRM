@@ -1,0 +1,31 @@
+{
+  "app": {
+    "title": "Car-Export-CRM",
+    "subtitle": "Poste de Travail Opérationnel v1.0",
+    "systemOperational": "Système Opérationnel",
+    "tenant": "Centre d'Exportation Allemagne"
+  },
+  "nav": {
+    "inbox": "Boîte de Réception",
+    "customers": "Clients",
+    "quotes": "Devis & FCR",
+    "documents": "Documents & RGPD"
+  },
+  "workspace": {
+    "title": "Poste de Travail Opérationnel Principal",
+    "description": "Architecture frontend initialisée avec Vite, React 19, TypeScript strict mode, palette sombre workstation Tailwind et iconographie Lucide. Disposition 3-panneaux WhatsApp prête.",
+    "serverState": "Gestion d'État Serveur",
+    "designPolicy": "Politique de Design",
+    "zeroAiSlop": "Zéro AI Slop / Dense",
+    "apiClient": "Client API REST"
+  },
+  "common": {
+    "loading": "Chargement...",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "delete": "Supprimer",
+    "confirm": "Confirmer",
+    "search": "Rechercher...",
+    "error": "Erreur"
+  }
+}

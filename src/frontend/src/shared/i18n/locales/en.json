@@ -1,0 +1,31 @@
+{
+  "app": {
+    "title": "Car-Export-CRM",
+    "subtitle": "Operational Workstation v1.0",
+    "systemOperational": "System Operational",
+    "tenant": "Germany Export Hub"
+  },
+  "nav": {
+    "inbox": "Inbox Workspace",
+    "customers": "Customers",
+    "quotes": "Quotes & FCR",
+    "documents": "Documents & GDPR"
+  },
+  "workspace": {
+    "title": "Primary Operational Workspace Bootstrap",
+    "description": "Frontend architecture initialized with Vite, React 19, TypeScript strict mode, Tailwind CSS dark workstation palette, and Lucide iconography. High-density 3-pane WhatsApp inbox layout prepared.",
+    "serverState": "Server State Management",
+    "designPolicy": "Design Policy",
+    "zeroAiSlop": "Zero AI Slop / Dense",
+    "apiClient": "REST API Client"
+  },
+  "common": {
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "confirm": "Confirm",
+    "search": "Search...",
+    "error": "Error"
+  }
+}

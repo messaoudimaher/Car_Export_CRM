@@ -12,9 +12,11 @@
   "dependencies": {
     "@tanstack/react-query": "^5.67.0",
     "axios": "^1.8.0",
+    "i18next": "^26.4.2",
     "lucide-react": "^0.475.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-i18next": "^17.0.14",
     "react-router-dom": "^7.3.0"
   },
   "devDependencies": {
