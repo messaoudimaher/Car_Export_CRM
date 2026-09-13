@@ -1,17 +1,8 @@
 import React from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Car, MessageSquare, Users, FileText, CheckCircle2, ShieldCheck } from "lucide-react";
 import { ToastContainer } from "../shared/components/feedback/ToastContainer";
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 60 * 1000,
-      refetchOnWindowFocus: false,
-    },
-  },
-});
+import { QueryProvider } from "./providers/QueryProvider";
 
 const OperationalShell: React.FC = () => {
   return (
@@ -89,13 +80,13 @@ const OperationalShell: React.FC = () => {
 
 export const App: React.FC = () => {
   return (
-    <QueryClientProvider client={queryClient}>
+    <QueryProvider>
       <BrowserRouter>
         <Routes>
           <Route path="*" element={<OperationalShell />} />
         </Routes>
         <ToastContainer />
       </BrowserRouter>
-    </QueryClientProvider>
+    </QueryProvider>
   );
 };
