@@ -96,3 +96,9 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 asyncio_mode = "auto"
 addopts = "-v --strict-markers"
+markers = [
+    "unit: Unit tests focusing on isolated domain models and services",
+    "integration: Integration tests requiring database or async components",
+    "security: Security tests asserting tenant isolation, IDOR, SSRF, and sanitization",
+    "ai: AI extraction, prompt safety, and suggestion validation tests",
+]
