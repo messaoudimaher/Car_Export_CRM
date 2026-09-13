@@ -14,7 +14,7 @@ from app.api.v1.router import api_v1_router
 from app.core.database import get_db_session
 from app.models.knowledge import KnowledgeEmbedding
 from app.models.user import UserRole
-from app.ports.embedding import EmbeddingProvider, EmbeddingResponse
+from app.ports.embedding import EmbeddingProvider, EmbeddingRequest, EmbeddingResponse
 
 
 @pytest.fixture
@@ -32,19 +32,28 @@ def mock_db_session() -> AsyncMock:
     session.commit = AsyncMock()
     session.refresh = AsyncMock()
     session.delete = AsyncMock()
+
+    mock_result = MagicMock()
+    mock_result.rowcount = 1
+    session.execute = AsyncMock(return_value=mock_result)
+
     return session
 
 
 @pytest.fixture
 def mock_embedding_provider() -> AsyncMock:
-    """Mock EmbeddingProvider returning fixed float vectors."""
+    """Mock EmbeddingProvider returning float vectors matching requested texts length."""
     provider = AsyncMock(spec=EmbeddingProvider)
-    provider.generate_embeddings.return_value = EmbeddingResponse(
-        embeddings=[[0.02] * 1536, [0.03] * 1536],
-        model="text-embedding-3-small",
-        dimensions=1536,
-        prompt_tokens=40,
-    )
+
+    async def mock_generate(req: EmbeddingRequest) -> EmbeddingResponse:
+        return EmbeddingResponse(
+            embeddings=[[0.02] * 1536 for _ in req.texts],
+            model="text-embedding-3-small",
+            dimensions=1536,
+            prompt_tokens=len(req.texts) * 20,
+        )
+
+    provider.generate_embeddings.side_effect = mock_generate
     return provider
 
 
@@ -211,3 +220,48 @@ async def test_knowledge_delete_chunk_endpoint(
 
     assert response.status_code == 204
     mock_db_session.delete.assert_called_once_with(mock_chunk)
+
+
+@pytest.mark.asyncio
+async def test_knowledge_delete_document_by_id_endpoint(
+    test_app: FastAPI,
+    mock_db_session: AsyncMock,
+) -> None:
+    """Verify DELETE /api/v1/knowledge/document/id/{document_id} deletes all document chunks."""
+    tenant_id = uuid.uuid4()
+    admin_id = uuid.uuid4()
+    doc_id = uuid.uuid4()
+
+    admin_user = CurrentUser(
+        user_id=admin_id,
+        tenant_id=tenant_id,
+        role=UserRole.TENANT_ADMIN.value,
+        email="admin@test.com",
+        is_active=True,
+    )
+
+    mock_result = MagicMock()
+    mock_result.rowcount = 4
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    async def override_db() -> AsyncIterator[AsyncSession]:
+        yield mock_db_session
+
+    test_app.dependency_overrides[get_db_session] = override_db
+    test_app.dependency_overrides[get_current_user] = lambda: admin_user
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=test_app),
+        base_url="http://test",
+    ) as client:
+        response = await client.delete(
+            f"/api/v1/knowledge/document/id/{doc_id}",
+            headers={"Authorization": "Bearer mock_token"},
+        )
+
+    test_app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    res = response.json()
+    assert res["deleted_count"] == 4
+    assert res["document_id"] == str(doc_id)
