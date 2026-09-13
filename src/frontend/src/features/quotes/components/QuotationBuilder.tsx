@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { X, FileText, Calculator, ShieldCheck, Eye, RefreshCw } from "lucide-react";
+import { X, FileText, Calculator, ShieldCheck, Eye, RefreshCw, AlertTriangle } from "lucide-react";
 import { QuotePdfPreviewModal } from "./QuotePdfPreviewModal";
 
 interface QuotationBuilderProps {
@@ -25,6 +25,7 @@ export const QuotationBuilder: React.FC<QuotationBuilderProps> = ({
   const [vin, setVin] = useState("WBA1234567890ABCD");
 
   const [priceExclVatEur, setPriceExclVatEur] = useState(45000);
+  const [discountPercent, setDiscountPercent] = useState(0);
   const [vatRegime, setVatRegime] = useState<VatRegime>("NETTO_EXPORT");
   const [transportFeeEur, setTransportFeeEur] = useState(1200);
   const [serviceFeeEur, setServiceFeeEur] = useState(800);
@@ -33,9 +34,10 @@ export const QuotationBuilder: React.FC<QuotationBuilderProps> = ({
 
   if (!isOpen) return null;
 
-  // Exact Deterministic Financial Calculations (BR-005, BR-006)
-  const vatAmountEur = vatRegime === "NETTO_EXPORT" ? 0 : Math.round(priceExclVatEur * 0.19);
-  const subtotalEur = priceExclVatEur + vatAmountEur;
+  // Exact Deterministic Financial Calculations (BR-005, BR-006, BR-015)
+  const discountedBasePriceEur = Math.round(priceExclVatEur * (1 - discountPercent / 100));
+  const vatAmountEur = vatRegime === "NETTO_EXPORT" ? 0 : Math.round(discountedBasePriceEur * 0.19);
+  const subtotalEur = discountedBasePriceEur + vatAmountEur;
   const totalExportPriceEur = subtotalEur + transportFeeEur + serviceFeeEur;
   const estimatedTndAmount = Math.round(totalExportPriceEur * 3.35);
 
@@ -162,9 +164,9 @@ export const QuotationBuilder: React.FC<QuotationBuilderProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 text-xs pt-1">
+            <div className="grid grid-cols-4 gap-2 text-xs pt-1">
               <div>
-                <label className="text-[10px] text-slate-400 block mb-1">Prix Achat Achat HT (€)</label>
+                <label className="text-[10px] text-slate-400 block mb-1">Prix Achat HT (€)</label>
                 <input
                   type="number"
                   value={priceExclVatEur}
@@ -174,7 +176,20 @@ export const QuotationBuilder: React.FC<QuotationBuilderProps> = ({
               </div>
 
               <div>
-                <label className="text-[10px] text-slate-400 block mb-1">Frais Transport Maritime (€)</label>
+                <label htmlFor="discount-input" className="text-[10px] text-slate-400 block mb-1">Remise Remise (%)</label>
+                <input
+                  id="discount-input"
+                  type="number"
+                  min={0}
+                  max={50}
+                  value={discountPercent}
+                  onChange={(e) => setDiscountPercent(Number(e.target.value))}
+                  className="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-xs text-slate-100 font-mono focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] text-slate-400 block mb-1">Transport Maritime (€)</label>
                 <input
                   type="number"
                   value={transportFeeEur}
@@ -193,6 +208,14 @@ export const QuotationBuilder: React.FC<QuotationBuilderProps> = ({
                 />
               </div>
             </div>
+
+            {/* BR-015 Manager Approval Warning */}
+            {discountPercent > 5 && (
+              <div className="p-2 bg-amber-950/80 border border-amber-700/80 rounded text-amber-200 text-[11px] flex items-center gap-2 font-mono">
+                <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                <span>Attention (BR-015): Remise de {discountPercent}% &gt; 5%. Soumission réservée à la validation d'un Manager.</span>
+              </div>
+            )}
           </div>
 
           {/* Section 3: Financial Summary Breakdown */}

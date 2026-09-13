@@ -41,4 +41,21 @@ describe("FCR Quotation Builder UI & PDF Preview (BR-005, BR-006)", () => {
     expect(screen.getByText("Aperçu PDF Devis Officiel FCR (Pre-signed S3)")).toBeDefined();
     expect(screen.getByText("Attacher & Envoyer sur WhatsApp")).toBeDefined();
   });
+
+  it("displays BR-015 Manager Approval Warning when discount exceeds 5%", () => {
+    render(
+      <QuotationBuilder
+        customerName="Mohamed Ben Ali"
+        customerPhone="+21698123456"
+        isOpen={true}
+        onClose={vi.fn()}
+      />
+    );
+
+    const discountInput = screen.getByLabelText(/Remise/i);
+    fireEvent.change(discountInput, { target: { value: "10" } });
+
+    expect(screen.getByText(/BR-015/i)).toBeDefined();
+    expect(screen.getByText(/validation d'un Manager/i)).toBeDefined();
+  });
 });
