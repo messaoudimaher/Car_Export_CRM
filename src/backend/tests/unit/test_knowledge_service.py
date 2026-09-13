@@ -1,4 +1,4 @@
-"""Unit tests for KnowledgeService safety limits, tenant isolation, and transactions (WS-13, SEC-007)."""
+"""Unit tests for KnowledgeService safety limits & tenant isolation (WS-13, SEC-007)."""
 
 import uuid
 from unittest.mock import AsyncMock
@@ -6,12 +6,10 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.core.errors import ValidationException
-from app.models.knowledge import KnowledgeEmbedding
 from app.ports.embedding import EmbeddingProvider, EmbeddingRequest, EmbeddingResponse
 from app.schemas.knowledge import KnowledgeDocumentIngestRequest
 from app.services.knowledge_service import (
     EXPECTED_VECTOR_DIMENSIONS,
-    MAX_CHUNKS_PER_INGEST,
     MAX_DOCUMENT_TEXT_LENGTH,
     KnowledgeService,
 )
