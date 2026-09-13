@@ -802,49 +802,60 @@ Per `AGENTS.md`, explicit **Human Approval** is strictly required before executi
 
 ---
 
-### WS-15 — Documents
+### WS-15 — Documents, Private Object Storage & GDPR Lifecycle
 
-#### `TASK-1501`: Document Metadata Model & Private S3 Bucket Integration (`BR-013`)
+#### `TASK-1501`: Document Metadata & Private Object Storage Integration (`BR-013`)
 - **Workstream**: `WS-15` | **Priority**: P0 (Must Have) | **Risk**: High | **Parallelization**: Sequential
-- **Objective**: Implement `Document` model and private AWS S3 bucket integration for export files (*Carte Grise*, *FCR* certs) (`BR-013`).
-- **Description**: Implement `app/models/document.py` and `app/services/storage_service.py`. S3 bucket configured with `block-public-access = true`, Server-Side Encryption at rest (SSE-S3 / KMS), lifecycle retention rules (automated archiving and purging), backup/restore strategy with point-in-time recovery, restricted IAM credentials with automated key rotation, short-lived authorized pre-signed access URLs (15-minute expiration), zero public CORS defaults, and storage reconciliation for decoupled DB and storage transaction failures.
-- **Dependencies**: `TASK-0102`, `TASK-0302` | **Blocks**: `TASK-1502`
-- **Affected Files**: `src/backend/app/models/document.py`, `src/backend/app/services/storage_service.py`
-- **Architecture References**: `BR-013`, `INV-008`, `SECURITY.md` Section 14
+- **Objective**: Extend existing `Document` model and `ObjectStorageProvider` port from `TASK-1003` to support secure customer/export documents (*Carte Grise* files, *FCR* certificates, passports, customs forms) using provider-agnostic private object storage (`BR-013`).
+- **Description**: Extend `app/models/document.py`, `app/ports/object_storage.py`, `app/adapters/object_storage_local.py`, `app/adapters/object_storage_s3.py`, and `app/services/document_service.py`. Support `LocalStorageAdapter` for local development/tests without AWS credentials, `MinIO`/S3-compatible adapter for local or self-hosted deployments, and optional AWS S3 production adapter. Store document metadata in PostgreSQL and binary content outside DB. Enforce mandatory tenant ownership (`SEC-007`) for every operation. Store object key, MIME type, size, SHA-256 checksum, document category, scan status (`Pending` -> `Passed`/`Quarantined`), uploader, and timestamps. Support 15-minute pre-signed upload/download authorization where supported.
+- **Dependencies**: `TASK-0102`, `TASK-0302`, `TASK-1003` | **Blocks**: `TASK-1502`
+- **Affected Files**: `src/backend/app/models/document.py`, `src/backend/app/ports/object_storage.py`, `src/backend/app/adapters/object_storage_local.py`, `src/backend/app/adapters/object_storage_s3.py`, `src/backend/app/services/document_service.py`
+- **Architecture References**: `BR-013`, `SECURITY.md` Section 14, `AGENTS.md` Rule 1
 - **Acceptance Criteria**:
-  - S3 object access restricted strictly to private bucket policies and 15-minute pre-signed access URLs.
-  - Encryption at rest (SSE-S3/KMS) and zero public CORS enforced.
-  - Automated lifecycle retention rules and backup/restore policy defined.
-  - Storage reconciliation job handles orphaned upload/DB failure states.
-  - File upload records SHA-256 hash.
-- **Required Tests**: Integration test with LocalStack/mock S3 generating and verifying pre-signed URLs.
-- **Definition of Done**: Document model and S3 storage service verified.
+  - No AWS account is required for local development or automated tests.
+  - No duplicate Document model or storage abstraction is introduced.
+  - Storage operations use ObjectStorageProvider, not direct SDK calls from business services.
+  - Every object key is tenant-scoped and generated server-side (`tenants/{tenant_id}/docs/{document_id}/{filename}`).
+  - Cross-tenant access is rejected (`SEC-007`).
+  - SHA-256 checksum is computed and verified server-side before marking document `Available`.
+  - File metadata and storage status are persisted transactionally; failed uploads do not leave misleading `Available` document records.
+  - Private objects cannot be accessed without authorization (download denied for `Pending` and `Quarantined` states).
+- **Required Tests**: Local adapter contract tests, MinIO/S3-compatible adapter tests, tenant-isolation and IDOR tests, path traversal/object key manipulation tests, checksum verification tests, upload failure/quarantine tests, private access and 15-min expiry tests.
+- **Definition of Done**: Existing document/storage foundation extended securely for customer/export documents and verified through provider contract, integration, and security tests.
 
-#### `TASK-1502`: Document Management REST API & Pre-signed URL Flow
+#### `TASK-1502`: Document Management REST API & Secure Upload/Download Flow
 - **Workstream**: `WS-15` | **Priority**: P0 (Must Have) | **Risk**: Medium | **Parallelization**: Parallel-after-contract
-- **Objective**: Implement REST API endpoints for document upload initialization and pre-signed download retrieval (`docs/api-contracts.md` Section 3.7).
-- **Description**: Implement `app/api/v1/documents.py` (`POST /api/v1/documents/upload-url`, `GET /api/v1/documents/{id}/download-url`, `GET /api/v1/documents`). Validate file size (<= 10MB) and file extensions (`.pdf`, `.png`, `.jpeg`).
+- **Objective**: Provide tenant-scoped REST APIs for document registration, upload initialization, metadata retrieval, listing, upload completion verification, and authorized download (`docs/api-contracts.md`).
+- **Description**: Implement `app/api/v1/documents.py` (`POST /api/v1/documents/upload-url`, `POST /api/v1/documents/{id}/complete`, `GET /api/v1/documents`, `GET /api/v1/documents/{id}`, `GET /api/v1/documents/{id}/download-url`, `DELETE /api/v1/documents/{id}`). Validate file size (<= 10MB limit) and allowed document category and MIME type (with extension as secondary check). Generate server-side object keys. Require authenticated tenant context (`SEC-007`). Enforce RBAC for upload, view, download, and deletion.
 - **Dependencies**: `TASK-1501` | **Blocks**: `TASK-1503`, `TASK-1703`
 - **Affected Files**: `src/backend/app/api/v1/documents.py`, `src/backend/app/schemas/document.py`
-- **Architecture References**: `BR-013`, `docs/api-contracts.md` Section 3.7
+- **Architecture References**: `BR-013`, `SECURITY.md` Section 14, `docs/api-contracts.md`
 - **Acceptance Criteria**:
-  - Endpoint validates file type and size limit before returning pre-signed upload URL.
-  - Download URL expires after 15 minutes.
-- **Required Tests**: API integration tests for document upload flow and expired URL rejection.
-- **Definition of Done**: Document API endpoints functional.
+  - Upload initialization rejects unsupported MIME types and oversized files.
+  - Download access is tenant- and role-authorized; URLs expire after 15 minutes.
+  - Upload completion endpoint verifies object existence, file size, and SHA-256 checksum server-side.
+  - Documents remain in `Pending` or `Quarantined` state until scanning/verification succeeds.
+  - Malware or content scanning failure prevents normal download access.
+  - Sensitive document access and modifications are auditable.
+- **Required Tests**: API upload/download flow, cross-tenant access rejection, RBAC enforcement, expired URL behavior, invalid MIME/signature and oversized file rejection, pending/quarantined document access denial, delete and re-upload behavior.
+- **Definition of Done**: Document API endpoints fully functional, secure, and tested.
 
 #### `TASK-1503`: GDPR Data Erasure & Anonymization Engine
 - **Workstream**: `WS-15` | **Priority**: P1 (Should Have) | **Risk**: High | **Parallelization**: Sequential
-- **Objective**: Implement GDPR right-to-erasure engine scrubbing PII while preserving anonymized accounting/quote records (`SECURITY.md` Section 20).
-- **Description**: Implement `app/services/gdpr_service.py`. Upon verified deletion request (`POST /api/v1/customers/{id}/anonymize`), scrub customer PII fields (name, phone, email, passport files) and replace customer reference with `anonymized_customer_<uuid>`, keeping quote financial records intact.
+- **Objective**: Implement verified GDPR right-to-erasure engine scrubbing PII while preserving legally required accounting/quote records and referential integrity (`SECURITY.md` Section 20).
+- **Description**: Implement `app/services/gdpr_service.py` and `app/api/v1/gdpr.py`. Verify requester identity and authorization before erasure. Define retention/legal-hold policy before deleting documents. Delete or cryptographically render inaccessible customer-linked files according to policy. Remove or anonymize customer PII while keeping quote and financial transaction records intact. Record immutable audit event `GDPR_CUSTOMER_ANONYMIZED`. Ensure operation is idempotent and transactionally safe.
 - **Dependencies**: `TASK-1502`, `TASK-1001` | **Blocks**: `WS-22`
-- **Affected Files**: `src/backend/app/services/gdpr_service.py`
+- **Affected Files**: `src/backend/app/services/gdpr_service.py`, `src/backend/app/api/v1/gdpr.py`
 - **Architecture References**: `SECURITY.md` Section 20, `docs/infrastructure-architecture.md` Section 22
 - **Acceptance Criteria**:
-  - Customer PII fields wiped cleanly while quote transaction history remains valid for accounting.
-  - Audit event `GDPR_CUSTOMER_ANONYMIZED` recorded.
-- **Required Tests**: Integration test executing customer anonymization and verifying PII erasure.
-- **Definition of Done**: GDPR anonymization engine operational.
+  - Customer PII is removed or anonymized according to approved retention policy.
+  - Customer-linked documents are deleted or made inaccessible.
+  - Quote and accounting records remain valid where retention is legally required.
+  - Legal holds prevent unauthorized deletion.
+  - Audit event records actor, time, scope, reason, and result without retaining unnecessary PII.
+  - Repeating request produces no inconsistent state.
+- **Required Tests**: Verified anonymization flow, document deletion/inaccessibility, referential-integrity preservation, legal-hold behavior, idempotency and rollback, tenant isolation and authorization, audit-event creation.
+- **Definition of Done**: GDPR anonymization engine operational and verified.
 
 ---
 
