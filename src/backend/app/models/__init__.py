@@ -11,6 +11,7 @@ from app.models.conversation import WhatsAppConversation
 from app.models.customer import Customer
 from app.models.document import Document
 from app.models.inbound_message import InboundMessage
+from app.models.knowledge import KnowledgeEmbedding
 from app.models.lead import Lead, LeadPriority, LeadStatus, LostReason
 from app.models.message import Message
 from app.models.quotation import (
@@ -35,6 +36,7 @@ __all__ = [
     "Customer",
     "Document",
     "InboundMessage",
+    "KnowledgeEmbedding",
     "Lead",
     "LeadPriority",
     "LeadStatus",

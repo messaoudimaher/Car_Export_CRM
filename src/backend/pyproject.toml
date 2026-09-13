@@ -30,6 +30,7 @@ dependencies = [
     "redis>=5.3.1",
     "reportlab>=5.0.1",
     "boto3>=1.43.93",
+    "pgvector>=0.5.0",
 ]
 
 [project.optional-dependencies]
@@ -85,6 +86,7 @@ module = [
     "reportlab.*",
     "boto3.*",
     "botocore.*",
+    "pgvector.*",
 ]
 ignore_missing_imports = true
 

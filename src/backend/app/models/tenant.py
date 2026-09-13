@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from app.models.customer import Customer
     from app.models.document import Document
     from app.models.inbound_message import InboundMessage
+    from app.models.knowledge import KnowledgeEmbedding
     from app.models.lead import Lead
     from app.models.message import Message
     from app.models.quotation import Quotation
@@ -124,6 +125,12 @@ class Tenant(Base):
 
     ai_suggestions: Mapped[list["AISuggestion"]] = relationship(
         "AISuggestion",
+        back_populates="tenant",
+        cascade="all, delete-orphan",
+    )
+
+    knowledge_embeddings: Mapped[list["KnowledgeEmbedding"]] = relationship(
+        "KnowledgeEmbedding",
         back_populates="tenant",
         cascade="all, delete-orphan",
     )
