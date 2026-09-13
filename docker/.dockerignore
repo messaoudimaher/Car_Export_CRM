@@ -1,0 +1,42 @@
+# Git & GitHub
+.git
+.github
+.gitignore
+.agents
+
+# Python & Virtual Environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+*.egg-info/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node.js & Frontend Build Assets
+node_modules/
+dist/
+.npm/
+*.log
+
+# Environment & Local Secrets
+.env
+.env.*
+!.env.example
+
+# IDE & Editor Settings
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Temporary & Storage Data
+storage/
+tmp/
+scratch/
+docs/reports/
