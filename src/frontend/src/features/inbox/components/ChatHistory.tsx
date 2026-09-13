@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Send, CheckCheck, Check, Clock, ShieldCheck, PhoneCall, Paperclip, Sparkles } from "lucide-react";
-import { ChatMessage, ConversationThread } from "../types";
+import { Send, CheckCheck, Check, Clock, ShieldCheck, PhoneCall, Paperclip, Sparkles, ShieldAlert } from "lucide-react";
+import { ChatMessage, ConversationThread, AiSuggestion } from "../types";
+import { AiUnderstandingCard } from "./AiUnderstandingCard";
+import { AiSuggestionCard } from "./AiSuggestionCard";
 
 interface ChatHistoryProps {
   thread?: ConversationThread;
@@ -19,7 +21,14 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
 }) => {
   const [content, setContent] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [activeUnderstanding, setActiveUnderstanding] = useState(thread?.activeAiUnderstanding);
+  const [activeSuggestion, setActiveSuggestion] = useState(thread?.activeAiSuggestion);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setActiveUnderstanding(thread?.activeAiUnderstanding);
+    setActiveSuggestion(thread?.activeAiSuggestion);
+  }, [thread]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -27,7 +36,7 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, activeUnderstanding, activeSuggestion]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,12 +58,37 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
     }
   };
 
+  const handleInsertIntoEditor = (text: string) => {
+    setContent(text);
+    replyInputRef?.current?.focus();
+  };
+
+  const handleApproveAndSendSuggestion = async (suggestion: AiSuggestion) => {
+    try {
+      setIsSubmitting(true);
+      await onSendMessage(suggestion.suggestedText);
+      if (activeSuggestion) {
+        setActiveSuggestion({ ...activeSuggestion, status: "APPROVED" });
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleConfirmUnderstanding = (_id: string) => {
+    if (activeUnderstanding) {
+      setActiveUnderstanding({ ...activeUnderstanding, status: "CONFIRMED" });
+    }
+  };
+
   if (!thread) {
     return (
       <main className="flex-1 flex flex-col items-center justify-center bg-slate-950 text-slate-500 p-8 select-none">
         <Sparkles className="w-12 h-12 text-slate-700 mb-3 animate-pulse" />
         <h3 className="text-sm font-semibold text-slate-300">Aucune conversation sélectionnée</h3>
-        <p className="text-xs text-slate-500 mt-1">Sélectionnez un fil de discussion dans la liste de gauche (raccourcis <kbd className="px-1 py-0.5 bg-slate-800 rounded">j</kbd>/<kbd className="px-1 py-0.5 bg-slate-800 rounded">k</kbd>).</p>
+        <p className="text-xs text-slate-500 mt-1">
+          Sélectionnez un fil de discussion dans la liste de gauche (raccourcis <kbd className="px-1 py-0.5 bg-slate-800 rounded">j</kbd>/<kbd className="px-1 py-0.5 bg-slate-800 rounded">k</kbd>).
+        </p>
       </main>
     );
   }
@@ -91,7 +125,7 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
         </div>
       </header>
 
-      {/* Chat Messages Timeline */}
+      {/* Chat Messages Timeline & AI HITL Cards */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:16px_16px]">
         {isLoading ? (
           <div className="text-center text-xs text-slate-500 py-8">Chargement de l'historique...</div>
@@ -106,10 +140,7 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
             });
 
             return (
-              <div
-                key={msg.id}
-                className={`flex flex-col ${isInbound ? "items-start" : "items-end"}`}
-              >
+              <div key={msg.id} className={`flex flex-col ${isInbound ? "items-start" : "items-end"}`}>
                 <div
                   className={`max-w-[75%] rounded-lg p-3 text-xs leading-relaxed ${
                     isInbound
@@ -118,8 +149,14 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
                   }`}
                 >
                   <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1 border-b border-slate-800/40 pb-1 gap-3 font-mono">
-                    <span className="font-semibold text-slate-300">
-                      {isInbound ? msg.senderName || thread.customerName : msg.senderName || "Agent"}
+                    <span className="font-semibold text-slate-300 flex items-center gap-1">
+                      {msg.senderName || thread.customerName}
+                      {isInbound && (
+                        <span className="text-[9px] text-slate-500 bg-slate-950 px-1 py-0.2 rounded border border-slate-800 flex items-center gap-0.5">
+                          <ShieldAlert className="w-2.5 h-2.5 text-amber-500" />
+                          &lt;untrusted_user_message&gt;
+                        </span>
+                      )}
                     </span>
                     <span>{formattedTime}</span>
                   </div>
@@ -143,6 +180,26 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
             );
           })
         )}
+
+        {/* Tier 2: Provisional AI Extraction Card (Indigo) */}
+        {activeUnderstanding && (
+          <AiUnderstandingCard
+            understanding={activeUnderstanding}
+            onConfirm={handleConfirmUnderstanding}
+            onReject={() => setActiveUnderstanding(undefined)}
+          />
+        )}
+
+        {/* Tier 3: Provisional AI Reply Suggestion Card (Amber) */}
+        {activeSuggestion && (
+          <AiSuggestionCard
+            suggestion={activeSuggestion}
+            onApproveAndSend={handleApproveAndSendSuggestion}
+            onInsertIntoEditor={handleInsertIntoEditor}
+            onReject={() => setActiveSuggestion(undefined)}
+          />
+        )}
+
         <div ref={messagesEndRef} />
       </div>
 
@@ -193,3 +250,4 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
     </main>
   );
 };
+

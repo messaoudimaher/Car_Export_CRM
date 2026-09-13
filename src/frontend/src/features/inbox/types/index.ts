@@ -3,6 +3,32 @@ export type MessageDirection = "INBOUND" | "OUTBOUND";
 export type MessageStatus = "SENT" | "DELIVERED" | "READ" | "FAILED";
 export type LeadStage = "NEW" | "QUALIFIED" | "VEHICLE_PROPOSED" | "QUOTE_SENT" | "FCR_VERIFIED" | "WON" | "LOST";
 
+export interface AiUnderstanding {
+  id: string;
+  threadId: string;
+  messageId: string;
+  extractedVehicleModel?: string;
+  extractedYearMin?: number;
+  extractedYearMax?: number;
+  extractedBudgetMinEur?: number;
+  extractedBudgetMaxEur?: number;
+  extractedFcrEligible?: boolean;
+  confidenceScore: number;
+  status: "PROVISIONAL" | "CONFIRMED" | "REJECTED";
+  createdAt: string;
+}
+
+export interface AiSuggestion {
+  id: string;
+  threadId: string;
+  messageId: string;
+  suggestedText: string;
+  reasoningSnippet?: string;
+  confidenceScore: number;
+  status: "PROVISIONAL" | "APPROVED" | "REJECTED";
+  createdAt: string;
+}
+
 export interface ChatMessage {
   id: string;
   threadId: string;
@@ -12,8 +38,8 @@ export interface ChatMessage {
   content: string;
   status: MessageStatus;
   timestamp: string;
-  aiUnderstandingId?: string;
-  aiSuggestionId?: string;
+  aiUnderstanding?: AiUnderstanding;
+  aiSuggestion?: AiSuggestion;
 }
 
 export interface CustomerContext {
@@ -52,6 +78,8 @@ export interface ConversationThread {
   assignedAgentName?: string;
   customer: CustomerContext;
   lead?: LeadContext;
+  activeAiUnderstanding?: AiUnderstanding;
+  activeAiSuggestion?: AiSuggestion;
 }
 
 export interface InboxFilter {
