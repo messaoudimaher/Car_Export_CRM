@@ -6,7 +6,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.middleware.correlation import CorrelationMiddleware
+from app.api.middleware.metrics import PrometheusMetricsMiddleware
 from app.api.middleware.webhook_signature import WebhookSignatureMiddleware
+from app.api.v1.health import router as health_router
 from app.api.v1.router import api_v1_router
 from app.core.config import settings
 from app.core.errors import register_exception_handlers
@@ -45,6 +47,9 @@ def create_app() -> FastAPI:
     # Register Correlation ID & Context Tracing Middleware
     app.add_middleware(CorrelationMiddleware)
 
+    # Register Prometheus HTTP Metrics Exporter Middleware (TASK-2001)
+    app.add_middleware(PrometheusMetricsMiddleware)
+
     # Register Webhook Signature Verification Middleware (BR-007)
     app.add_middleware(WebhookSignatureMiddleware)
 
@@ -52,7 +57,9 @@ def create_app() -> FastAPI:
     register_exception_handlers(app)
 
     # Include API routers
+    app.include_router(health_router)
     app.include_router(api_v1_router)
+
 
     return app
 
