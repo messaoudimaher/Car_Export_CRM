@@ -10,6 +10,7 @@ from app.models.base import Base, TimestampMixin
 from app.models.conversation import WhatsAppConversation
 from app.models.customer import Customer
 from app.models.document import Document
+from app.models.followup import FollowUp, FollowUpStatus
 from app.models.inbound_message import InboundMessage
 from app.models.knowledge import KnowledgeEmbedding
 from app.models.lead import Lead, LeadPriority, LeadStatus, LostReason
@@ -35,6 +36,8 @@ __all__ = [
     "Base",
     "Customer",
     "Document",
+    "FollowUp",
+    "FollowUpStatus",
     "InboundMessage",
     "KnowledgeEmbedding",
     "Lead",

@@ -13,6 +13,7 @@ from app.models.base import Base
 
 if TYPE_CHECKING:
     from app.models.customer import Customer
+    from app.models.followup import FollowUp
     from app.models.quotation import Quotation
     from app.models.tenant import Tenant
     from app.models.user import User
@@ -151,6 +152,12 @@ class Lead(Base):
 
     quotations: Mapped[list["Quotation"]] = relationship(
         "Quotation",
+        back_populates="lead",
+        cascade="all, delete-orphan",
+    )
+
+    follow_ups: Mapped[list["FollowUp"]] = relationship(
+        "FollowUp",
         back_populates="lead",
         cascade="all, delete-orphan",
     )

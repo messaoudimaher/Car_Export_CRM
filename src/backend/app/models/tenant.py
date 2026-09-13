@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from app.models.conversation import WhatsAppConversation
     from app.models.customer import Customer
     from app.models.document import Document
+    from app.models.followup import FollowUp
     from app.models.inbound_message import InboundMessage
     from app.models.knowledge import KnowledgeEmbedding
     from app.models.lead import Lead
@@ -131,6 +132,12 @@ class Tenant(Base):
 
     knowledge_embeddings: Mapped[list["KnowledgeEmbedding"]] = relationship(
         "KnowledgeEmbedding",
+        back_populates="tenant",
+        cascade="all, delete-orphan",
+    )
+
+    follow_ups: Mapped[list["FollowUp"]] = relationship(
+        "FollowUp",
         back_populates="tenant",
         cascade="all, delete-orphan",
     )
