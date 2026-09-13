@@ -6,6 +6,7 @@ from app.models.ai_understanding import (
     AIUnderstandingIntent,
     AIUnderstandingStatus,
 )
+from app.models.audit_event import AuditEvent
 from app.models.base import Base, TimestampMixin
 from app.models.conversation import WhatsAppConversation
 from app.models.customer import Customer
@@ -33,6 +34,7 @@ __all__ = [
     "AIUnderstanding",
     "AIUnderstandingIntent",
     "AIUnderstandingStatus",
+    "AuditEvent",
     "Base",
     "Customer",
     "Document",
