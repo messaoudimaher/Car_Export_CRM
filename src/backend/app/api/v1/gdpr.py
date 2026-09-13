@@ -56,7 +56,7 @@ async def set_customer_legal_hold(
     customer_id: UUID,
     payload: GDPRLegalHoldRequest,
     tenant_id: UUID = Depends(get_current_tenant_id),
-    _: CurrentUser = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)),
+    current_user: CurrentUser = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)),
     session: AsyncSession = Depends(get_db_session),
 ) -> dict[str, Any]:
     """Enforce or release legal retention hold blocking GDPR automated erasure."""
@@ -65,6 +65,7 @@ async def set_customer_legal_hold(
         tenant_id=tenant_id,
         customer_id=customer_id,
         legal_hold=payload.legal_hold,
+        requester_user_id=current_user.user_id,
     )
     return {
         "customer_id": customer.id,

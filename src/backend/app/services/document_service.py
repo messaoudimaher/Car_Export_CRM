@@ -1,6 +1,7 @@
 """Document Service orchestrating PDF generation, private storage & RBAC (WS-10, TASK-1003)."""
 
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -122,7 +123,7 @@ class DocumentService:
         document_id: uuid.UUID,
         sha256_hash: str | None = None,
     ) -> Document:
-        """Verify object existence and checksum, marking Document Available (TASK-1501)."""
+        """Verify object existence and checksum, leaving scan_status Pending."""
         stmt = select(Document).where(Document.id == document_id, Document.tenant_id == tenant_id)
         result = await self.session.execute(stmt)
         doc = result.scalar_one_or_none()
@@ -141,14 +142,70 @@ class DocumentService:
         if sha256_hash:
             doc.sha256_hash = sha256_hash
 
-        doc.scan_status = "Passed"
-        doc.status = "Available"
+        # Safe Scan Lifecycle: Only auto-pass if explicit dev bypass setting is enabled
+        if settings.DEV_AUTO_PASS_FILE_SCANS:
+            doc.scan_status = "Passed"
+            doc.status = "Available"
+        else:
+            doc.scan_status = "Pending"
+            doc.status = "Pending"
+
         await self.session.commit()
         await self.session.refresh(doc)
 
         logger.info(
             f"Completed document upload verification for '{doc.id}'",
-            extra={"tenant_id": str(tenant_id), "document_id": str(doc.id), "status": doc.status},
+            extra={
+                "tenant_id": str(tenant_id),
+                "document_id": str(doc.id),
+                "status": doc.status,
+                "scan_status": doc.scan_status,
+            },
+        )
+        return doc
+
+    async def process_scan_result(
+        self,
+        tenant_id: uuid.UUID,
+        document_id: uuid.UUID,
+        scan_passed: bool,
+        scanner_info: str = "ClamAV/v1.0",
+        failure_reason: str | None = None,
+    ) -> Document:
+        """Process asynchronous security scan result for a document."""
+        stmt = select(Document).where(Document.id == document_id, Document.tenant_id == tenant_id)
+        result = await self.session.execute(stmt)
+        doc = result.scalar_one_or_none()
+
+        if doc is None:
+            raise NotFoundException(f"Document '{document_id}' not found")
+
+        scanned_at = datetime.now(UTC).isoformat()
+        doc.scan_details = {
+            "scanner_info": scanner_info,
+            "scanned_at": scanned_at,
+            "scan_passed": scan_passed,
+            "failure_reason": failure_reason,
+        }
+
+        if scan_passed:
+            doc.scan_status = "Passed"
+            doc.status = "Available"
+        else:
+            doc.scan_status = "Quarantined"
+            doc.status = "Quarantined"
+
+        await self.session.commit()
+        await self.session.refresh(doc)
+
+        logger.info(
+            f"Processed scan result for document '{doc.id}': scan_status='{doc.scan_status}'",
+            extra={
+                "tenant_id": str(tenant_id),
+                "document_id": str(doc.id),
+                "scan_status": doc.scan_status,
+                "scanner_info": scanner_info,
+            },
         )
         return doc
 
@@ -317,9 +374,11 @@ class DocumentService:
         if doc is None:
             raise NotFoundException(f"Document '{document_id}' not found")
 
-        # Reject download access if document is Pending or Quarantined
-        if doc.status in ("Pending", "Quarantined"):
-            raise ForbiddenException(f"Document access denied for status '{doc.status}'")
+        # Reject download access unless status is Available AND scan_status is Passed
+        if doc.status != "Available" or doc.scan_status != "Passed":
+            raise ForbiddenException(
+                f"Document access denied: status '{doc.status}', scan_status '{doc.scan_status}'"
+            )
 
         url = await self.storage_provider.generate_presigned_url(
             object_key=doc.object_key,

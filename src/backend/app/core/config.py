@@ -90,17 +90,35 @@ class Settings(BaseSettings):
 
     # Object Storage Configuration (S3)
     OBJECT_STORAGE_BUCKET: str = Field(
-        default="car-export-crm-dev-storage", description="Private S3 Object Storage Bucket"
+        default="car-export-crm-dev-storage",
+        validation_alias=AliasChoices("OBJECT_STORAGE_BUCKET", "S3_BUCKET_NAME"),
+        description="Private S3 Object Storage Bucket",
     )
     S3_ENDPOINT_URL: str | None = Field(
         default=None, description="Optional custom S3 / MinIO endpoint URL"
     )
     S3_ACCESS_KEY_ID: str = Field(
-        default="dev_s3_key_id_placeholder", description="S3 Access Key ID"
+        default="dev_s3_key_id_placeholder",
+        validation_alias=AliasChoices("S3_ACCESS_KEY_ID", "AWS_ACCESS_KEY_ID"),
+        description="S3 Access Key ID",
     )
     S3_SECRET_ACCESS_KEY: str = Field(
-        default="dev_s3_secret_access_key_placeholder", description="S3 Secret Access Key"
+        default="dev_s3_secret_access_key_placeholder",
+        validation_alias=AliasChoices("S3_SECRET_ACCESS_KEY", "AWS_SECRET_ACCESS_KEY"),
+        description="S3 Secret Access Key",
     )
+    DEV_AUTO_PASS_FILE_SCANS: bool = Field(
+        default=False,
+        description=(
+            "Development-only flag to auto-pass document security scans during upload completion. "
+            "MUST be False in production/staging."
+        ),
+    )
+
+    @property
+    def S3_BUCKET_NAME(self) -> str:
+        """Alias for OBJECT_STORAGE_BUCKET for compatibility."""
+        return self.OBJECT_STORAGE_BUCKET
 
     @property
     def is_production(self) -> bool:
@@ -162,6 +180,12 @@ class Settings(BaseSettings):
     def validate_production_secrets(self) -> Self:
         """Prevent default development placeholder secrets in production or staging environments."""
         if self.ENVIRONMENT in ("production", "staging"):
+            if self.DEV_AUTO_PASS_FILE_SCANS:
+                msg = (
+                    "DEV_AUTO_PASS_FILE_SCANS is strictly forbidden in "
+                    f"{self.ENVIRONMENT} environment."
+                )
+                raise ValueError(msg)
             if "dev_" in self.JWT_SECRET:
                 msg = f"Insecure default JWT_SECRET is forbidden in {self.ENVIRONMENT} environment."
                 raise ValueError(msg)
@@ -174,6 +198,18 @@ class Settings(BaseSettings):
             if "dev_" in self.LLM_PROVIDER_API_KEY:
                 msg = (
                     "Insecure default LLM_PROVIDER_API_KEY is forbidden in "
+                    f"{self.ENVIRONMENT} environment."
+                )
+                raise ValueError(msg)
+            if "minioadmin" in self.S3_ACCESS_KEY_ID or "dev_" in self.S3_ACCESS_KEY_ID:
+                msg = (
+                    "Insecure default S3_ACCESS_KEY_ID is forbidden in "
+                    f"{self.ENVIRONMENT} environment."
+                )
+                raise ValueError(msg)
+            if "minioadmin" in self.S3_SECRET_ACCESS_KEY or "dev_" in self.S3_SECRET_ACCESS_KEY:
+                msg = (
+                    "Insecure default S3_SECRET_ACCESS_KEY is forbidden in "
                     f"{self.ENVIRONMENT} environment."
                 )
                 raise ValueError(msg)

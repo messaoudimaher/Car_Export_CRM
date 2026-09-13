@@ -98,11 +98,12 @@ class GDPRService:
 
         # 2. Scrub customer PII fields
         hex_suffix = customer.id.hex[:8]
+        numeric_suffix = f"{int(customer.id.bytes[:5].hex(), 16):010d}"
         customer.first_name = "Anonymized"
         customer.last_name = f"User-{hex_suffix}"
         customer.full_name = f"Anonymized User {hex_suffix}"
         customer.email = None
-        customer.phone_e164 = f"+0000000{hex_suffix}"
+        customer.phone_e164 = f"+000{numeric_suffix}"
         customer.whatsapp_id = None
         customer.notes = None
         customer.is_anonymized = True
@@ -139,6 +140,7 @@ class GDPRService:
         tenant_id: uuid.UUID,
         customer_id: uuid.UUID,
         legal_hold: bool,
+        requester_user_id: uuid.UUID | None = None,
     ) -> Customer:
         """Toggle legal retention hold on a customer record under tenant scope (SEC-007)."""
         stmt = select(Customer).where(
@@ -156,7 +158,13 @@ class GDPRService:
         await self.session.refresh(customer)
 
         logger.info(
-            f"Set legal hold={legal_hold} on customer '{customer_id}'",
-            extra={"tenant_id": str(tenant_id), "customer_id": str(customer_id)},
+            f"GDPR_LEGAL_HOLD_UPDATED: Set legal hold={legal_hold} on customer '{customer_id}'",
+            extra={
+                "event_type": "GDPR_LEGAL_HOLD_UPDATED",
+                "tenant_id": str(tenant_id),
+                "customer_id": str(customer_id),
+                "legal_hold": legal_hold,
+                "requester_user_id": str(requester_user_id) if requester_user_id else None,
+            },
         )
         return customer

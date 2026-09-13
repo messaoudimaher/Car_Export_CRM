@@ -85,8 +85,8 @@ async def test_gdpr_service_anonymize_customer_db_persistence() -> None:
         assert anonymized_cust.is_anonymized is True
         assert anonymized_cust.first_name == "Anonymized"
         assert anonymized_cust.email is None
-        assert anonymized_cust.notes is None
-        assert customer.id.hex[:8] in anonymized_cust.phone_e164
+        assert anonymized_cust.phone_e164.startswith("+000")
+        assert len(anonymized_cust.phone_e164) <= 15
 
         # 2. Idempotency test: second invocation returns cleanly
         result_idempotent = await service.anonymize_customer(

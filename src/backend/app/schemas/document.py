@@ -1,6 +1,7 @@
 """Document Pydantic DTO schemas & access payload contracts (WS-10, TASK-1003, WS-15, TASK-1501)."""
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -80,10 +81,30 @@ class DocumentResponse(BaseModel):
         default=None, description="Server-side verified SHA-256 checksum hex string"
     )
     scan_status: str = Field(description="Scan status (Pending, Passed, Quarantined)")
+    scan_details: dict[str, Any] | None = Field(
+        default=None, description="Structured security scan details JSON"
+    )
     status: str = Field(description="Lifecycle status (Pending, Available, Quarantined, Deleted)")
     version: int = Field(description="Document version number")
     created_at: datetime = Field(description="Creation UTC timestamp")
     updated_at: datetime = Field(description="Last update UTC timestamp")
+
+
+class DocumentScanResultRequest(BaseModel):
+    """Input payload for recording background security scan results."""
+
+    scan_passed: bool = Field(
+        ..., description="True if security scan passed, False if malware/threat detected"
+    )
+    scanner_info: str = Field(
+        default="ClamAV/v1.0",
+        min_length=1,
+        max_length=100,
+        description="Scanner software and version identification",
+    )
+    failure_reason: str | None = Field(
+        default=None, max_length=255, description="Scan failure or quarantine reason string"
+    )
 
 
 class DocumentAccessResponse(BaseModel):

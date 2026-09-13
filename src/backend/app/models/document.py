@@ -3,7 +3,7 @@
 import uuid
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import ForeignKey, Index, Integer, String
+from sqlalchemy import JSON, ForeignKey, Index, Integer, String
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -124,6 +124,12 @@ class Document(Base):
         default="Pending",
         server_default="Pending",
         comment="Malware and integrity scan status (Pending, Passed, Quarantined)",
+    )
+
+    scan_details: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="Structured security scan details JSON (scanner info, timestamp, failure reason)",
     )
 
     status: Mapped[str] = mapped_column(

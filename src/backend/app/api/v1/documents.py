@@ -17,6 +17,7 @@ from app.models.user import User, UserRole
 from app.schemas.document import (
     DocumentAccessResponse,
     DocumentResponse,
+    DocumentScanResultRequest,
     DocumentUploadCompleteRequest,
     DocumentUploadInitRequest,
     DocumentUploadInitResponse,
@@ -80,12 +81,37 @@ async def complete_document_upload(
     tenant_id: UUID = Depends(get_current_tenant_id),
     session: AsyncSession = Depends(get_db_session),
 ) -> DocumentResponse:
-    """Verify uploaded object on storage and transition document status to Available."""
+    """Verify uploaded object on storage and register document completion."""
     service = DocumentService(session=session)
     doc = await service.complete_upload(
         tenant_id=tenant_id,
         document_id=document_id,
         sha256_hash=payload.sha256_hash,
+    )
+    return DocumentResponse.model_validate(doc)
+
+
+@router.post(
+    "/{document_id}/scan-result",
+    response_model=DocumentResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Process Security Scan Result for Document",
+)
+async def process_document_scan_result(
+    document_id: UUID,
+    payload: DocumentScanResultRequest,
+    tenant_id: UUID = Depends(get_current_tenant_id),
+    _: User = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SUPER_ADMIN)),
+    session: AsyncSession = Depends(get_db_session),
+) -> DocumentResponse:
+    """Record security scan result, marking document Passed/Available or Quarantined."""
+    service = DocumentService(session=session)
+    doc = await service.process_scan_result(
+        tenant_id=tenant_id,
+        document_id=document_id,
+        scan_passed=payload.scan_passed,
+        scanner_info=payload.scanner_info,
+        failure_reason=payload.failure_reason,
     )
     return DocumentResponse.model_validate(doc)
 

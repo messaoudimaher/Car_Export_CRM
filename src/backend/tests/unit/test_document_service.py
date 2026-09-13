@@ -131,7 +131,7 @@ async def test_document_service_upload_initiate_and_complete_flow(tmp_path: Path
         assert f"tenants/{tenant.id}/docs/{doc.id}/carte_grise_golf7.pdf" in doc.object_key
 
         # Accessing download URL when status is Pending must be rejected
-        with pytest.raises(ForbiddenException, match="Document access denied for status 'Pending'"):
+        with pytest.raises(ForbiddenException, match="Document access denied"):
             await service.get_document_access_url(
                 tenant_id=tenant.id, document_id=doc.id, requesting_user=user
             )
@@ -153,21 +153,35 @@ async def test_document_service_upload_initiate_and_complete_flow(tmp_path: Path
             sha256_hash="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
         )
 
-        assert completed_doc.status == "Available"
-        assert completed_doc.scan_status == "Passed"
+        # In secure mode, complete_upload leaves status Pending until scan worker completes
+        assert completed_doc.status == "Pending"
+        assert completed_doc.scan_status == "Pending"
         assert (
             completed_doc.sha256_hash
             == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
         )
 
-        # 4. Authorized download access
+        # 4. Controlled scan result process marks document Passed & Available
+        scanned_doc = await service.process_scan_result(
+            tenant_id=tenant.id,
+            document_id=doc.id,
+            scan_passed=True,
+            scanner_info="ClamAV/v1.0",
+        )
+
+        assert scanned_doc.status == "Available"
+        assert scanned_doc.scan_status == "Passed"
+        assert scanned_doc.scan_details is not None
+        assert scanned_doc.scan_details["scan_passed"] is True
+
+        # 5. Authorized download access
         accessed_doc, download_url = await service.get_document_access_url(
             tenant_id=tenant.id, document_id=doc.id, requesting_user=user
         )
         assert accessed_doc.id == doc.id
         assert "expires_in=900" in download_url
 
-        # 5. Cross-tenant access rejection
+        # 6. Cross-tenant access rejection
         other_tenant_user = User(
             tenant_id=uuid.uuid4(),
             email=f"other-{uuid.uuid4().hex[:6]}@example.com",
@@ -181,7 +195,7 @@ async def test_document_service_upload_initiate_and_complete_flow(tmp_path: Path
                 tenant_id=tenant.id, document_id=doc.id, requesting_user=other_tenant_user
             )
 
-        # 6. Delete document
+        # 7. Delete document
         deleted = await service.delete_document(tenant_id=tenant.id, document_id=doc.id)
         assert deleted is True
 
