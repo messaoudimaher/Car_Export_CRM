@@ -8,6 +8,7 @@
     "build": "tsc && vite build",
     "lint": "tsc --noEmit",
     "test": "vitest run",
+    "test:e2e": "playwright test --config=../../e2e/playwright.config.ts",
     "preview": "vite preview"
   },
   "dependencies": {
