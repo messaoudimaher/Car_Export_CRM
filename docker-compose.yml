@@ -67,6 +67,20 @@ services:
       start_period: 10s
 
   # ------------------------------------------------------------------------------
+  # LocalStack Automated S3 Bucket Initialization (TASK-2103)
+  # ------------------------------------------------------------------------------
+  localstack-init:
+    image: localstack/localstack:latest
+    container_name: car_export_localstack_init
+    depends_on:
+      localstack:
+        condition: service_healthy
+    entrypoint: /bin/sh -c
+    command: >
+      "awslocal s3 mb s3://carexport-quotations-dev || true &&
+       echo 'S3 Bucket carexport-quotations-dev created successfully.'"
+
+  # ------------------------------------------------------------------------------
   # Backend FastAPI API Node & ARQ Worker
   # ------------------------------------------------------------------------------
   backend:
@@ -77,6 +91,7 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
       - ENVIRONMENT=development
       - LOG_LEVEL=INFO
@@ -92,6 +107,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      localstack-init:
+        condition: service_completed_successfully
 
   # ------------------------------------------------------------------------------
   # Frontend React SPA Workstation (Nginx Non-Root)
