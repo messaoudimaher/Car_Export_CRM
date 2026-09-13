@@ -5,6 +5,7 @@ import { Car, MessageSquare, Users, FileText, CheckCircle2, ShieldCheck } from "
 import { ToastContainer } from "../shared/components/feedback/ToastContainer";
 import { LanguageSelector } from "../shared/components/ui/LanguageSelector";
 import { QueryProvider } from "./providers/QueryProvider";
+import { InboxWorkspace } from "../features/inbox/components/InboxWorkspace";
 import "../shared/i18n";
 
 const OperationalShell: React.FC = () => {
@@ -51,33 +52,9 @@ const OperationalShell: React.FC = () => {
           </div>
         </header>
 
-        {/* Workspace Body */}
-        <div className="flex-1 p-6 overflow-y-auto">
-          <div className="max-w-4xl mx-auto space-y-6">
-            <div className="bg-crm-card border border-crm-border rounded-lg p-6 space-y-4">
-              <div className="flex items-center space-x-3 rtl:space-x-reverse">
-                <MessageSquare className="w-6 h-6 text-crm-primary" />
-                <h1 className="text-xl font-bold text-crm-text">{t("workspace.title")}</h1>
-              </div>
-              <p className="text-sm text-crm-muted leading-relaxed">
-                {t("workspace.description")}
-              </p>
-              <div className="grid grid-cols-3 gap-4 pt-2">
-                <div className="bg-crm-bg p-3 border border-crm-border rounded text-xs space-y-1">
-                  <div className="text-crm-muted font-medium">{t("workspace.serverState")}</div>
-                  <div className="font-mono text-crm-primary">TanStack Query v5</div>
-                </div>
-                <div className="bg-crm-bg p-3 border border-crm-border rounded text-xs space-y-1">
-                  <div className="text-crm-muted font-medium">{t("workspace.designPolicy")}</div>
-                  <div className="font-mono text-crm-success">{t("workspace.zeroAiSlop")}</div>
-                </div>
-                <div className="bg-crm-bg p-3 border border-crm-border rounded text-xs space-y-1">
-                  <div className="text-crm-muted font-medium">{t("workspace.apiClient")}</div>
-                  <div className="font-mono text-crm-ai">Axios + RFC 7807</div>
-                </div>
-              </div>
-            </div>
-          </div>
+        {/* Workspace Body: 3-Pane WhatsApp Inbox Operational Workspace */}
+        <div className="flex-1 flex overflow-hidden">
+          <InboxWorkspace />
         </div>
       </main>
     </div>
