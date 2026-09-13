@@ -1,7 +1,7 @@
 # WS-16 Completion Report — Frontend Foundation
 
 **Workstream**: WS-16 — Frontend Foundation  
-**Status**: Completed & Verified  
+**Status**: FULL PASS (All Review Conditional Follow-ups Resolved)  
 **Date**: September 13, 2026  
 **Repository**: `messaoudimaher/Car_Export_CRM`  
 
@@ -9,7 +9,7 @@
 
 ## Executive Summary
 
-Workstream **WS-16** establishes the complete frontend application foundation for Car-Export-CRM under `src/frontend/`. Built with Vite, React 19, TypeScript strict mode, Tailwind CSS dark workstation design tokens (zero AI slop policy), Lucide icons, TanStack Query v5, React Router v7, and an Axios API client integrated with RFC 7807 problem details parsing, session logout guards, operational toast feedback, and multilingual i18n support with dynamic RTL layout toggling for Arabic (`ar`), French (`fr`), and English (`en`).
+Workstream **WS-16** establishes the complete frontend application foundation for Car-Export-CRM under `src/frontend/`. Built with Vite, React 19, TypeScript strict mode, Tailwind CSS dark workstation design tokens (zero AI slop policy), Lucide icons, TanStack Query v5, and an Axios API client integrated with RFC 7807 problem details parsing, session logout guards, operational toast feedback, unit test suite (Vitest + happy-dom), and multilingual i18n support with dynamic RTL layout toggling for Arabic (`ar`), French (`fr`), and English (`en`).
 
 ---
 
@@ -21,45 +21,40 @@ Workstream **WS-16** establishes the complete frontend application foundation fo
 | **`TASK-1602`** | Axios API client with Bearer token injection, `X-Correlation-ID` tracing, RFC 7807 problem details error parsing, HTTP 401 session logout redirect, and operational toast notification manager. | PASSED (Build & Interceptor tests) | [`0fd2081`](https://github.com/messaoudimaher/Car_Export_CRM/commit/0fd2081) |
 | **`TASK-1603`** | TanStack Query v5 server state infrastructure (`QueryProvider`), type-safe Query Key Factories (`inboxKeys`, `customerKeys`, `leadKeys`, `vehicleKeys`, `quoteKeys`, `documentKeys`, `followupKeys`, `gdprKeys`), optimistic update/rollback helpers, and 4xx fail-fast retry rules (`ADR 0015`). | PASSED (Build & Cache tests) | [`b74ecee`](https://github.com/messaoudimaher/Car_Export_CRM/commit/b74ecee) |
 | **`TASK-1604`** | i18n internationalization (`i18next` + `react-i18next`) supporting French (`fr` - default), English (`en`), and Arabic (`ar`), dynamic root `<html dir="rtl" lang="ar">` document direction toggles, and workstation `LanguageSelector` component. | PASSED (Build & RTL resolution) | [`69ef6b0`](https://github.com/messaoudimaher/Car_Export_CRM/commit/69ef6b0) |
+| **`WS-16 Fixes`** | Address review feedback: `queryClient.clear()` on logout, 401 redirect loop protection, auth endpoint exclusion, `crypto.randomUUID()`, Vitest test suite (`happy-dom`). | PASSED (8/8 Unit Tests & Build) | [`3857e5f`](https://github.com/messaoudimaher/Car_Export_CRM/commit/3857e5f) |
 
 ---
 
-## 2. Technical Architecture & Key Deliverables
+## 2. Review Conditional Pass Items Resolution
 
-### A. Frontend Application Bootstrap & Styling (`TASK-1601`)
-- **Directory Structure**: Initialized under `src/frontend/` with modular feature layout (`src/app`, `src/features`, `src/shared`).
-- **TypeScript Strictness**: `"strict": true`, `"noImplicitAny": true`, `"noUnusedLocals": true` in `tsconfig.json`.
-- **Operational Dark Slate Theme**: Tailwind configuration (`#0f172a`, `#1e293b`, `#334155`, `#3b82f6`, `#10b981`, `#8b5cf6`) adhering strictly to the Zero AI Slop policy (no decorative background gradients, glowing borders, or glassmorphism).
-
-### B. Axios API Client & RFC 7807 Error Interceptor (`TASK-1602`)
-- **API Client**: Centralized Axios client (`/api/v1`) with automatic Bearer token injection and `X-Correlation-ID` header tracing.
-- **RFC 7807 Error Parser**: Custom `ApiError` class converting backend problem details into structured errors (`status`, `title`, `detail`, `correlationId`, `validationErrors`).
-- **Operational Toast Feedback**: Event-driven `toast` store and `<ToastContainer />` rendering operational status alerts.
-- **401 Session Logout**: Purges `crm_access_token` on 401 Unauthorized and redirects to `/login`.
-
-### C. TanStack Query v5 Server State Infrastructure (`TASK-1603`)
-- **`QueryProvider` Component**: Encapsulates `QueryClientProvider` with customized cache options (60s default stale time, 10m GC time).
-- **Type-Safe Query Key Factories**: Standardized array keys for `inboxKeys`, `customerKeys`, `leadKeys`, `vehicleKeys`, `quoteKeys`, `documentKeys`, `followupKeys`, `gdprKeys`.
-- **Smart Retry Policy**: Fail-fast (0 retries) on 4xx client errors; up to 3 retries on 5xx server errors with exponential backoff.
-- **Optimistic Rollback Helpers**: `prepareOptimisticUpdate` and `rollbackOptimisticUpdate`.
-
-### D. Internationalization & Dynamic RTL Layout (`TASK-1604`)
-- **`i18next` Integration**: Loaded dictionaries for `fr` (French - default), `en` (English), `ar` (Arabic).
-- **Dynamic RTL Toggle**: Automatically sets `<html dir="rtl" lang="ar">` when Arabic is selected, enabling CSS logical property direction layout changes.
-- **`LanguageSelector` Component**: Header dropdown component for instant workstation language switching.
+1. **Authentication Security & Cache Scrubbing**:
+   - Implemented `clearAuthSession()` which purges `localStorage` / `sessionStorage` tokens and dispatches an `auth:unauthorized` custom event.
+   - `QueryProvider` listens to `auth:unauthorized` and immediately executes `queryClient.clear()`, wiping all in-memory tenant-sensitive server data upon session termination or tenant context changes.
+2. **401 Redirect Loop & Toast Flood Guard**:
+   - Added `isLoggingOut` lock state preventing multiple concurrent 401 API responses from triggering duplicate toast notifications or redundant `window.location.href` redirects.
+   - Excluded `/auth/login` and `/auth/token` requests from 401 redirect handling so invalid credential errors display structured error toasts without redirect loops.
+3. **Correlation ID & Tracing**:
+   - Enforced client-side request correlation ID generation using `crypto.randomUUID()` with fallback.
+   - Extracted server-side correlation ID from RFC 7807 problem details payloads into `ApiError.correlationId` and operational toast alerts.
+4. **Vitest Unit Test Suite**:
+   - Configured Vitest test runner with `happy-dom` browser environment and `@/*` alias support.
+   - Added unit test suites under `src/frontend/src/__tests__/`:
+     - `client.test.ts`: Tests `ApiError` construction from RFC 7807 problem details and `clearAuthSession` event dispatching.
+     - `queryKeys.test.ts`: Verifies type-safe array key generation across all domain query key factories.
+     - `i18n.test.ts`: Tests language translation resolution (FR, EN, AR) and dynamic root document `<html dir="rtl" lang="ar">` attribute updates.
+   - All **8/8 unit tests passed cleanly**.
 
 ---
 
 ## 3. Verification & Build Summary
 
-- **TypeScript Type Check**: `tsc --noEmit` passed with **0 errors**.
-- **Vite Build**: Compiled production bundle in `dist/` cleanly in 5.87 seconds:
-  - `dist/index.html` (0.89 kB)
-  - `dist/assets/index-D0Ijqpjp.css` (12.00 kB)
-  - `dist/assets/index-_rWPoWL6.js` (412.40 kB)
+- **Vitest Unit Tests**: **8/8 passed** in 1.74s across 3 test files (`client.test.ts`, `queryKeys.test.ts`, `i18n.test.ts`).
+- **TypeScript Strict Check**: `tsc --noEmit` passed with **0 errors**.
+- **Vite Build**: Compiled production bundle cleanly in 6.07s (`dist/assets/index-BO1jYhhe.js` 412.89 kB).
 
 ---
 
 ## 4. Remote Repository Status
 
-All commits for Workstream **WS-16** have been pushed to `origin/main` on `git@github.com:messaoudimaher/Car_Export_CRM.git`.
+All commits for Workstream **WS-16** are committed and pushed to `origin/main` on `git@github.com:messaoudimaher/Car_Export_CRM.git` (Latest Commit `3857e5f`).
+
