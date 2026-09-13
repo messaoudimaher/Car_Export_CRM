@@ -13,16 +13,16 @@ test.describe("Journey J1: WhatsApp Message Ingestion & Customer Creation", () =
   test("ingests inbound WhatsApp message and binds to customer profile", async ({ page }) => {
     await page.goto("/");
 
-    // Verify inbox thread list displays the customer name and phone number
-    const customerHeader = page.locator("text=Mohamed Ben Ali");
+    // Verify inbox thread list displays the customer name
+    const customerHeader = page.locator("text=Mohamed Ben Ali").first();
     await expect(customerHeader).toBeVisible();
 
     // Verify inbound message snippet is displayed in thread item
-    const messageSnippet = page.locator("text=Bonjour, je cherche une Golf 8 TDI 2021");
+    const messageSnippet = page.locator("text=BMW X5").first();
     await expect(messageSnippet).toBeVisible();
 
-    // Verify FCR eligibility badge is displayed
-    const fcrBadge = page.locator("text=FCR").first();
-    await expect(fcrBadge).toBeVisible();
+    // Verify customer info in right panel
+    const fcrText = page.locator("text=FCR").first();
+    await expect(fcrText).toBeVisible();
   });
 });

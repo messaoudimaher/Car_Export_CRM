@@ -19,8 +19,11 @@ build/
 .env
 .env.local
 
-# IDE & System
-.vscode/
-.idea/
-.DS_Store
-Thumbs.db
+# Node & Frontend
+node_modules/
+dist/
+
+# Playwright E2E Artifacts
+playwright-report/
+test-results/
+

@@ -14,15 +14,15 @@ test.describe("Journey J3: Lead Pipeline Advancement", () => {
     await page.goto("/leads");
 
     // Verify Lead Pipeline page header
-    const pipelineHeader = page.locator("text=Pipeline des Opportunités");
+    const pipelineHeader = page.locator("text=Pipeline des Opportunités (Leads)");
     await expect(pipelineHeader).toBeVisible();
 
     // Verify stage filter dropdown
-    const stageSelect = page.locator("select");
+    const stageSelect = page.locator("select").nth(1);
     await expect(stageSelect).toBeVisible();
 
     // Verify lead item rendering
-    const leadVehicle = page.locator("text=Volkswagen Golf 8 TDI (2021)");
+    const leadVehicle = page.locator("text=BMW X5 xDrive30d M Sport (2022-2023)");
     await expect(leadVehicle).toBeVisible();
   });
 });

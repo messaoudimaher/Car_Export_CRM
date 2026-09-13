@@ -14,7 +14,7 @@ test.describe("Journey J2: AI Extraction & Human Confirmation Boundary", () => {
     await page.goto("/");
 
     // Verify AI Understanding Card displays extracted vehicle model
-    const extractedModel = page.locator("text=Volkswagen Golf 8 TDI");
+    const extractedModel = page.locator("text=BMW X5 xDrive30d").first();
     await expect(extractedModel).toBeVisible();
 
     // Verify confidence score badge

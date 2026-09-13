@@ -1,0 +1,85 @@
+name: CI Quality Gates Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  backend-quality-gate:
+    name: Backend Pytest & Security Audit
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: crm_test
+          POSTGRES_USER: crm_user
+          POSTGRES_PASSWORD: crm_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv package manager
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run Backend Pytest Suite with Coverage Gate
+        env:
+          DATABASE_URL: postgresql+asyncpg://crm_user:crm_password@localhost:5432/crm_test
+          JWT_SECRET_KEY: ci_test_secret_key_32_bytes_min_length!!
+        run: |
+          uv run pytest --cov=src/backend --cov-report=term-missing --cov-fail-under=80
+
+      - name: Run Security Static Audit (Bandit & Security Checks)
+        run: |
+          uv run bandit -r src/backend -x src/backend/tests -l
+
+  frontend-quality-gate:
+    name: Frontend Vitest, TypeScript & E2E
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Frontend Dependencies
+        working-directory: ./src/frontend
+        run: npm ci
+
+      - name: TypeScript Validation (No Structural Errors)
+        working-directory: ./src/frontend
+        run: npm run lint
+
+      - name: Run Frontend Vitest & React Testing Library Suite
+        working-directory: ./src/frontend
+        run: npm run test
+
+      - name: Install Playwright Browsers
+        working-directory: ./e2e
+        run: |
+          npm ci
+          npx playwright install chromium --with-deps
+
+      - name: Run Playwright End-to-End Suite (Journeys J1-J8 + Live Backend)
+        working-directory: ./e2e
+        run: npx playwright test --project=chromium
