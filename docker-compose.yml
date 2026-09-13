@@ -1,0 +1,118 @@
+# ==============================================================================
+# Car-Export-CRM Local Development Stack (TASK-2103)
+# Boot with: docker compose up -d
+# ==============================================================================
+
+services:
+  # ------------------------------------------------------------------------------
+  # PostgreSQL 16 Database with pgvector Extension
+  # ------------------------------------------------------------------------------
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: car_export_postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: crm_dev
+      POSTGRES_USER: crm_user
+      POSTGRES_PASSWORD: crm_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crm_user -d crm_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ------------------------------------------------------------------------------
+  # Redis 7.2 Cache & ARQ Background Task Queue
+  # ------------------------------------------------------------------------------
+  redis:
+    image: redis:7.2-alpine
+    container_name: car_export_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --save 60 1 --loglevel notice
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # ------------------------------------------------------------------------------
+  # LocalStack S3 Object Storage Emulator
+  # ------------------------------------------------------------------------------
+  localstack:
+    image: localstack/localstack:latest
+    container_name: car_export_localstack
+    restart: unless-stopped
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=s3
+      - AWS_DEFAULT_REGION=eu-central-1
+    volumes:
+      - localstack_data:/var/lib/localstack
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:4566/_localstack/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ------------------------------------------------------------------------------
+  # Backend FastAPI API Node & ARQ Worker
+  # ------------------------------------------------------------------------------
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    container_name: car_export_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=INFO
+      - DATABASE_URL=postgresql+asyncpg://crm_user:crm_password@postgres:5432/crm_dev
+      - REDIS_URL=redis://redis:6379/0
+      - S3_ENDPOINT_URL=http://localstack:4566
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - S3_BUCKET_NAME=carexport-quotations-dev
+      - JWT_SECRET_KEY=dev_jwt_secret_key_change_in_production_32bytes_min
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ------------------------------------------------------------------------------
+  # Frontend React SPA Workstation (Nginx Non-Root)
+  # ------------------------------------------------------------------------------
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    container_name: car_export_frontend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8000
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  localstack_data:
+    driver: local
