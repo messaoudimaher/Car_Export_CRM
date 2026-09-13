@@ -2,12 +2,14 @@ import React, { useState, useEffect, useRef } from "react";
 import { ThreadList } from "./ThreadList";
 import { ChatHistory } from "./ChatHistory";
 import { CustomerSidebar } from "./CustomerSidebar";
+import { QuotationBuilder } from "../../quotes/components/QuotationBuilder";
 import { useThreads, useThreadMessages, useSendMessage } from "../api/inboxApi";
 import { InboxFilter } from "../types";
 
 export const InboxWorkspace: React.FC = () => {
   const [filter, setFilter] = useState<InboxFilter>({ status: "ALL" });
   const [activeThreadId, setActiveThreadId] = useState<string | undefined>();
+  const [isQuoteBuilderOpen, setIsQuoteBuilderOpen] = useState(false);
   const replyInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const { data: threads = [], isLoading: isLoadingThreads } = useThreads(filter);
@@ -27,6 +29,11 @@ export const InboxWorkspace: React.FC = () => {
   const handleSendMessage = async (content: string) => {
     if (!activeThread) return;
     await sendMessageMutation.mutateAsync({ threadId: activeThread.id, content });
+  };
+
+  const handleSendQuoteToChat = async (_pdfUrl: string, summaryText: string) => {
+    if (!activeThread) return;
+    await sendMessageMutation.mutateAsync({ threadId: activeThread.id, content: summaryText });
   };
 
   // Keyboard navigation shortcuts: j/k thread selection, r focus reply, Esc blur
@@ -64,7 +71,7 @@ export const InboxWorkspace: React.FC = () => {
   }, [threads, activeThreadId]);
 
   return (
-    <div className="flex-1 flex h-[calc(100vh-3.5rem)] w-full overflow-hidden bg-slate-950 font-sans text-slate-100">
+    <div className="flex-1 flex h-[calc(100vh-3.5rem)] w-full overflow-hidden bg-slate-950 font-sans text-slate-100 relative">
       {/* Pane 1: Left Thread List (320px) */}
       <ThreadList
         threads={threads}
@@ -88,7 +95,19 @@ export const InboxWorkspace: React.FC = () => {
       <CustomerSidebar
         customer={activeThread?.customer}
         lead={activeThread?.lead}
+        onOpenQuoteBuilder={() => setIsQuoteBuilderOpen(true)}
       />
+
+      {/* Quotation Builder Drawer Modal */}
+      {activeThread && (
+        <QuotationBuilder
+          isOpen={isQuoteBuilderOpen}
+          onClose={() => setIsQuoteBuilderOpen(false)}
+          customerName={activeThread.customerName}
+          customerPhone={activeThread.customerPhone}
+          onSendQuoteToChat={handleSendQuoteToChat}
+        />
+      )}
     </div>
   );
 };

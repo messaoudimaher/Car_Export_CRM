@@ -5,9 +5,18 @@ import { CustomerContext, LeadContext } from "../types";
 interface CustomerSidebarProps {
   customer?: CustomerContext;
   lead?: LeadContext;
+  onOpenQuoteBuilder?: () => void;
+  onOpenDocuments?: () => void;
+  onEditCustomer?: () => void;
 }
 
-export const CustomerSidebar: React.FC<CustomerSidebarProps> = ({ customer, lead }) => {
+export const CustomerSidebar: React.FC<CustomerSidebarProps> = ({
+  customer,
+  lead,
+  onOpenQuoteBuilder,
+  onOpenDocuments,
+  onEditCustomer,
+}) => {
   if (!customer) {
     return (
       <aside className="w-[380px] flex-shrink-0 bg-slate-900 border-l border-slate-800 p-6 flex items-center justify-center text-xs text-slate-500 select-none">
@@ -137,6 +146,7 @@ export const CustomerSidebar: React.FC<CustomerSidebarProps> = ({ customer, lead
       <div className="p-4 space-y-2 mt-auto">
         <button
           type="button"
+          onClick={onOpenQuoteBuilder}
           className="w-full py-2 px-3 bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs rounded transition-colors flex items-center justify-center gap-2 shadow-sm"
         >
           <FileText className="w-3.5 h-3.5" />
@@ -146,6 +156,7 @@ export const CustomerSidebar: React.FC<CustomerSidebarProps> = ({ customer, lead
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
+            onClick={onOpenDocuments}
             className="py-1.5 px-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-medium rounded border border-slate-700 transition-colors flex items-center justify-center gap-1"
           >
             <Layers className="w-3 h-3 text-slate-400" />
@@ -153,6 +164,7 @@ export const CustomerSidebar: React.FC<CustomerSidebarProps> = ({ customer, lead
           </button>
           <button
             type="button"
+            onClick={onEditCustomer}
             className="py-1.5 px-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-medium rounded border border-slate-700 transition-colors flex items-center justify-center gap-1"
           >
             <ExternalLink className="w-3 h-3 text-slate-400" />
