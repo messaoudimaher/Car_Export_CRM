@@ -73,7 +73,7 @@ def test_followup_pydantic_schemas() -> None:
 
 
 def test_followup_lifecycle_methods() -> None:
-    """Verify mark_completed and mark_cancelled lifecycle transition helpers."""
+    """Verify mark_completed and mark_cancelled lifecycle transition helpers and validations."""
     task = FollowUp(
         tenant_id=uuid.uuid4(),
         lead_id=uuid.uuid4(),
@@ -86,8 +86,22 @@ def test_followup_lifecycle_methods() -> None:
     assert task.status == FollowUpStatus.COMPLETED.value
     assert task.completed_at is not None
 
-    task.mark_cancelled()
-    assert task.status == FollowUpStatus.CANCELLED.value
+    # Cannot cancel a completed task
+    with pytest.raises(ValueError, match="Cannot cancel a completed follow-up task"):
+        task.mark_cancelled()
+
+    task_cancelled = FollowUp(
+        tenant_id=uuid.uuid4(),
+        lead_id=uuid.uuid4(),
+        title="Cancelled Task",
+        due_at=datetime.now(UTC),
+    )
+    task_cancelled.mark_cancelled()
+    assert task_cancelled.status == FollowUpStatus.CANCELLED.value
+
+    # Cannot complete a cancelled task
+    with pytest.raises(ValueError, match="Cannot complete a cancelled follow-up task"):
+        task_cancelled.mark_completed()
 
 
 @pytest.mark.asyncio

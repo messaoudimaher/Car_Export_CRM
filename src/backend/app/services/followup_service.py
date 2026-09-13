@@ -126,7 +126,10 @@ class FollowUpService:
     ) -> FollowUp:
         """Mark a follow-up task as Completed (SEC-007)."""
         followup = await self.get_followup_by_id(tenant_id=tenant_id, followup_id=followup_id)
-        followup.mark_completed(completion_time=completion_time or datetime.now(UTC))
+        try:
+            followup.mark_completed(completion_time=completion_time or datetime.now(UTC))
+        except ValueError as err:
+            raise ValidationException(str(err)) from err
 
         await self.session.commit()
         await self.session.refresh(followup)
@@ -145,7 +148,10 @@ class FollowUpService:
     ) -> FollowUp:
         """Mark a follow-up task as Cancelled (SEC-007)."""
         followup = await self.get_followup_by_id(tenant_id=tenant_id, followup_id=followup_id)
-        followup.mark_cancelled()
+        try:
+            followup.mark_cancelled()
+        except ValueError as err:
+            raise ValidationException(str(err)) from err
 
         await self.session.commit()
         await self.session.refresh(followup)
@@ -160,6 +166,18 @@ class FollowUpService:
     ) -> FollowUp:
         """Update mutable fields of a follow-up task under tenant scope (SEC-007)."""
         followup = await self.get_followup_by_id(tenant_id=tenant_id, followup_id=followup_id)
+
+        # Disallow updating core content of terminal follow-ups unless changing status
+        if followup.status in (FollowUpStatus.COMPLETED.value, FollowUpStatus.CANCELLED.value):
+            if (
+                payload.title is not None
+                or payload.description is not None
+                or payload.due_at is not None
+            ):
+                raise ValidationException(
+                    "Cannot edit task content when follow-up is already in terminal state "
+                    f"'{followup.status}'."
+                )
 
         if payload.title is not None:
             followup.title = payload.title
@@ -177,15 +195,18 @@ class FollowUpService:
             )
             if status_str not in tuple(s.value for s in FollowUpStatus):
                 raise ValidationException(f"Invalid follow-up status '{status_str}'.")
-            if (
-                status_str == FollowUpStatus.COMPLETED.value
-                and followup.status != FollowUpStatus.COMPLETED.value
-            ):
-                followup.mark_completed()
-            elif status_str == FollowUpStatus.CANCELLED.value:
-                followup.mark_cancelled()
-            else:
-                followup.status = status_str
+            try:
+                if (
+                    status_str == FollowUpStatus.COMPLETED.value
+                    and followup.status != FollowUpStatus.COMPLETED.value
+                ):
+                    followup.mark_completed()
+                elif status_str == FollowUpStatus.CANCELLED.value:
+                    followup.mark_cancelled()
+                else:
+                    followup.status = status_str
+            except ValueError as err:
+                raise ValidationException(str(err)) from err
 
         await self.session.commit()
         await self.session.refresh(followup)

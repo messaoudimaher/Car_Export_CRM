@@ -128,9 +128,13 @@ class FollowUp(Base):
 
     def mark_completed(self, completion_time: datetime | None = None) -> None:
         """Mark follow-up task as Completed set completed_at timestamp."""
+        if self.status == FollowUpStatus.CANCELLED.value:
+            raise ValueError("Cannot complete a cancelled follow-up task.")
         self.status = FollowUpStatus.COMPLETED.value
         self.completed_at = completion_time or datetime.now(UTC)
 
     def mark_cancelled(self) -> None:
         """Mark follow-up task as Cancelled."""
+        if self.status == FollowUpStatus.COMPLETED.value:
+            raise ValueError("Cannot cancel a completed follow-up task.")
         self.status = FollowUpStatus.CANCELLED.value
