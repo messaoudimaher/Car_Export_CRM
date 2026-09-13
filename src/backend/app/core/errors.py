@@ -91,6 +91,24 @@ class ForbiddenException(AppException):
         )
 
 
+class SSRFProtectionException(ForbiddenException):
+    """Exception raised when an outbound fetch request violates SSRF security boundaries (FR-SSRF-001)."""
+
+    def __init__(
+        self,
+        message: str = "Outbound request blocked by SSRF security policy.",
+        detail: str | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            detail=detail or message,
+            details=details,
+        )
+        self.type_uri = "https://errors.carexportcrm.com/ssrf-protection-error"
+        self.title = "SSRF Protection Error"
+
+
 class ValidationException(AppException):
     """Request validation exception (HTTP 422)."""
 
