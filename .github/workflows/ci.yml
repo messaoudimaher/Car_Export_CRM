@@ -226,16 +226,21 @@ jobs:
     environment: staging
 
     steps:
-      - name: Log Deployment Execution & Tag Validation
+      - name: Log Deployment Execution & Rollback Tag Validation
         run: |
+          PREVIOUS_SHA="${{ github.event.before }}"
+          if [ -z "$PREVIOUS_SHA" ] || [ "$PREVIOUS_SHA" = "0000000000000000000000000000000000000000" ]; then
+            PREVIOUS_SHA="HEAD~1"
+          fi
           echo "================================================================="
           echo "STAGING DEPLOYMENT EXECUTION GATE"
           echo "================================================================="
           echo "Target Environment: Staging (Isolated VPC)"
-          echo "Immutable Backend Tag: ghcr.io/${{ github.repository }}/backend:${{ github.sha }}"
-          echo "Immutable Frontend Tag: ghcr.io/${{ github.repository }}/frontend:${{ github.sha }}"
+          echo "Active Deployment Tag: ghcr.io/${{ github.repository }}/backend:${{ github.sha }}"
+          echo "Rollback Fallback Tag: ghcr.io/${{ github.repository }}/backend:${PREVIOUS_SHA}"
           echo "Quality Gate Verification: All 6 CI/CD pipeline jobs PASSED."
           echo "Note: Production deployment requires separate explicit approval gate."
           echo "================================================================="
+
 
 

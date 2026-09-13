@@ -81,6 +81,21 @@ services:
        echo 'S3 Bucket carexport-quotations-dev created successfully.'"
 
   # ------------------------------------------------------------------------------
+  # Database Schema Migration Task (Prevents Multi-Replica Migration Race Conditions)
+  # ------------------------------------------------------------------------------
+  db-migration:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    container_name: car_export_db_migration
+    command: alembic upgrade head
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://crm_user:crm_password@postgres:5432/crm_dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ------------------------------------------------------------------------------
   # Backend FastAPI API Node & ARQ Worker
   # ------------------------------------------------------------------------------
   backend:
@@ -91,7 +106,7 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
-    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     environment:
       - ENVIRONMENT=development
       - LOG_LEVEL=INFO
@@ -108,6 +123,8 @@ services:
       redis:
         condition: service_healthy
       localstack-init:
+        condition: service_completed_successfully
+      db-migration:
         condition: service_completed_successfully
 
   # ------------------------------------------------------------------------------
