@@ -44,7 +44,7 @@ async def readiness_probe() -> dict[str, Any]:
     if not db_healthy:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"status": "unhealthy", "database": "disconnected"},
+            detail="Database connection disconnected",
         )
     return {
         "status": "ready",

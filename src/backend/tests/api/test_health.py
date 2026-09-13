@@ -42,3 +42,17 @@ async def test_readiness_probe_failure_isolation(client: AsyncClient) -> None:
         assert data["status"] == "ready"
         assert data["database"] == "connected"
         assert data["redis"] == "connected"
+
+
+@pytest.mark.asyncio
+async def test_readiness_probe_database_unhealthy_returns_503(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify GET /health/ready returns 503 Service Unavailable when database connection fails (TASK-2002)."""
+    async def mock_db_unhealthy() -> bool:
+        return False
+
+    monkeypatch.setattr("app.api.v1.health.check_database_health", mock_db_unhealthy)
+    response = await client.get("/health/ready")
+    assert response.status_code == 503
+    data = response.json()
+    assert "Database connection disconnected" in str(data["detail"])
+
