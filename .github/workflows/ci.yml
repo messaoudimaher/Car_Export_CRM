@@ -39,14 +39,20 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
-      - name: Run Backend Pytest Suite with Coverage Gate
+      - name: Verify PostgreSQL & Initialize pgvector Extension & Migrations
+        env:
+          DATABASE_URL: postgresql+asyncpg://crm_user:crm_password@localhost:5432/crm_test
+        run: |
+          uv run alembic upgrade head
+
+      - name: Run Backend Pytest Suite (All 380 Tests with Live DB Enabled & Coverage Gate)
         env:
           DATABASE_URL: postgresql+asyncpg://crm_user:crm_password@localhost:5432/crm_test
           JWT_SECRET_KEY: ci_test_secret_key_32_bytes_min_length!!
         run: |
           uv run pytest --cov=src/backend --cov-report=term-missing --cov-fail-under=80
 
-      - name: Run Security Static Audit (Bandit & Security Checks)
+      - name: Run Security Static Audit (Bandit)
         run: |
           uv run bandit -r src/backend -x src/backend/tests -l
 
@@ -66,7 +72,11 @@ jobs:
         working-directory: ./src/frontend
         run: npm ci
 
-      - name: TypeScript Validation (No Structural Errors)
+      - name: TypeScript Type Check (Strict Compiler Verification)
+        working-directory: ./src/frontend
+        run: npx tsc --noEmit
+
+      - name: Code Linting
         working-directory: ./src/frontend
         run: npm run lint
 
