@@ -61,3 +61,30 @@ class KnowledgeDocumentIngestResult(BaseModel):
     document_name: str = Field(..., description="Source document title")
     total_chunks: int = Field(..., description="Total number of chunks produced")
     chunk_ids: list[uuid.UUID] = Field(..., description="UUIDs of generated chunk records")
+
+
+class KnowledgeSearchResult(BaseModel):
+    """Result item DTO returned from vector similarity search in RAG engine."""
+
+    id: uuid.UUID = Field(..., description="Knowledge chunk record UUID")
+    tenant_id: uuid.UUID = Field(..., description="Tenant organization UUID")
+    document_id: uuid.UUID | None = Field(default=None, description="Source document UUID")
+    document_name: str = Field(..., description="Source document name")
+    chunk_index: int = Field(..., description="Sequential chunk index")
+    chunk_content: str = Field(..., description="Retrieved chunk text body")
+    similarity_score: float = Field(..., description="Cosine similarity score (0.0 to 1.0)")
+    metadata_jsonb: dict[str, Any] = Field(
+        default_factory=dict, description="Extensible chunk metadata JSON"
+    )
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class KnowledgeSearchRequest(BaseModel):
+    """Query payload schema for RAG vector search."""
+
+    query_text: str = Field(..., min_length=1, description="Natural language search query text")
+    top_k: int = Field(default=5, ge=1, le=50, description="Maximum number of chunks to return")
+    min_similarity: float = Field(
+        default=0.0, ge=0.0, le=1.0, description="Minimum cosine similarity threshold filter"
+    )
