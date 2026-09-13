@@ -32,17 +32,28 @@ export const apiClient: AxiosInstance = axios.create({
   timeout: 15000,
 });
 
+let isLoggingOut = false;
+
+export function clearAuthSession(): void {
+  localStorage.removeItem("crm_access_token");
+  sessionStorage.removeItem("crm_access_token");
+  window.dispatchEvent(new CustomEvent("auth:unauthorized"));
+}
+
 // Request Interceptor: Attach JWT Bearer token & correlation ID (SEC-001, ADR 0008)
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const token = localStorage.getItem("crm_access_token");
+    const token = localStorage.getItem("crm_access_token") || sessionStorage.getItem("crm_access_token");
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
 
-    // Inject client-side request correlation ID if not set
+    // Inject client-side request correlation ID if not set using crypto.randomUUID() where available
     if (config.headers && !config.headers["X-Correlation-ID"]) {
-      config.headers["X-Correlation-ID"] = `req_${Math.random().toString(36).substring(2, 11)}`;
+      const uuid = typeof crypto !== "undefined" && crypto.randomUUID 
+        ? crypto.randomUUID() 
+        : `req_${Math.random().toString(36).substring(2, 11)}`;
+      config.headers["X-Correlation-ID"] = uuid;
     }
     return config;
   },
@@ -61,6 +72,7 @@ apiClient.interceptors.response.use(
   (error: AxiosError<ProblemDetails>) => {
     const status = error.response?.status || 500;
     const rawData = error.response?.data;
+    const requestUrl = error.config?.url || "";
 
     let problem: ProblemDetails;
     if (rawData && typeof rawData === "object" && "title" in rawData) {
@@ -77,13 +89,18 @@ apiClient.interceptors.response.use(
 
     const apiError = new ApiError(problem, status);
 
-    // 401 Unauthorized: Session Logout & Redirect
-    if (status === 401) {
-      localStorage.removeItem("crm_access_token");
-      window.dispatchEvent(new CustomEvent("auth:unauthorized"));
-      if (!window.location.pathname.startsWith("/login")) {
-        toast.error("Session Expired", "Please log in again to continue.");
-        window.location.href = "/login";
+    const isAuthEndpoint = requestUrl.includes("/auth/login") || requestUrl.includes("/auth/token");
+
+    // 401 Unauthorized handling
+    if (status === 401 && !isAuthEndpoint) {
+      if (!isLoggingOut) {
+        isLoggingOut = true;
+        clearAuthSession();
+        if (!window.location.pathname.startsWith("/login")) {
+          toast.error("Session Expired", "Please log in again to continue.");
+          window.location.href = "/login";
+        }
+        setTimeout(() => { isLoggingOut = false; }, 3000);
       }
     } else {
       // Dispatch operational Toast alert for RFC 7807 error
@@ -93,3 +110,4 @@ apiClient.interceptors.response.use(
     return Promise.reject(apiError);
   }
 );
+

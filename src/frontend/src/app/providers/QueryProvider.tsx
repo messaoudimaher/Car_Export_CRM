@@ -33,6 +33,16 @@ interface QueryProviderProps {
 }
 
 export const QueryProvider: React.FC<QueryProviderProps> = ({ children }) => {
+  React.useEffect(() => {
+    const handleUnauthorized = () => {
+      queryClient.clear();
+    };
+    window.addEventListener("auth:unauthorized", handleUnauthorized);
+    return () => {
+      window.removeEventListener("auth:unauthorized", handleUnauthorized);
+    };
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       {children}
