@@ -15,6 +15,7 @@ from app.core.security import decode_access_token
 from app.models.user import User, UserRole
 
 if TYPE_CHECKING:
+    from app.ports.embedding import EmbeddingProvider
     from app.ports.whatsapp import WhatsAppProvider
 
 
@@ -166,3 +167,17 @@ def get_whatsapp_provider() -> "WhatsAppProvider":
     ) and settings.META_WEBHOOK_APP_SECRET.startswith("dev_"):
         return DemoWhatsAppProvider()
     return MetaWhatsAppProvider(app_secret=settings.META_WEBHOOK_APP_SECRET)
+
+
+def get_embedding_provider() -> "EmbeddingProvider":
+    """Dependency returning configured EmbeddingProvider implementation based on environment."""
+    from app.adapters.llm_demo import DemoLLMAdapter
+    from app.adapters.llm_openai import OpenAIAdapter
+    from app.core.config import settings
+
+    if settings.ENVIRONMENT in (
+        "development",
+        "test",
+    ) or settings.OPENAI_API_KEY.startswith("dev_"):
+        return DemoLLMAdapter()
+    return OpenAIAdapter(api_key=settings.OPENAI_API_KEY)
