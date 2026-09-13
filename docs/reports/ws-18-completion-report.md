@@ -10,9 +10,9 @@
 
 ## 1. Executive Summary
 
-Workstream **WS-18 (Security Engineering)** has delivered, tested, and verified all 4 scheduled security engineering tasks. 
+Workstream **WS-18 (Security Engineering)** has delivered, tested, and verified all 4 scheduled security engineering tasks and addressed all 7 follow-up items from the `CONDITIONAL PASS` review, elevating the workstream to **FULL PASS**.
 
-This workstream establishes defense-in-depth multi-tenant security, automated IDOR regression testing, SSRF egress protection, immutable append-only audit logging, and recursive sensitive data scrubbing across application logs and database events.
+This workstream establishes defense-in-depth multi-tenant security, automated IDOR regression testing across 100% of resource families, SSRF egress protection with DNS rebinding and redirect re-validation, ORM/DB immutable append-only audit logging, and recursive sensitive data scrubbing across application logs and database events.
 
 ---
 
@@ -20,42 +20,60 @@ This workstream establishes defense-in-depth multi-tenant security, automated ID
 
 | Task ID | Task Description | Key Implementation Files | Verification Status | Remote Git Commit Hash |
 | :--- | :--- | :--- | :---: | :---: |
-| **`TASK-1801`** | IDOR & Multi-Tenant Cross-Access Automated Test Suite (`AC-01`) | [`tests/security/test_idor_isolation.py`](file:///c:/Users/ascora/Desktop/maher/Car-Export-CRM/src/backend/tests/security/test_idor_isolation.py) | `PASSED` (7/7 tests) | [`639a6a8`](https://github.com/messaoudimaher/Car_Export_CRM/commit/639a6a8) |
+| **`TASK-1801`** | IDOR & Multi-Tenant Cross-Access Automated Test Suite (`AC-01`) | [`tests/security/test_idor_isolation.py`](file:///c:/Users/ascora/Desktop/maher/Car-Export-CRM/src/backend/tests/security/test_idor_isolation.py) | `PASSED` (13/13 tests) | [`639a6a8`](https://github.com/messaoudimaher/Car_Export_CRM/commit/639a6a8) |
 | **`TASK-1802`** | Outbound Egress Guard & SSRF Protection (`FR-SSRF-001`) | [`app/core/egress_guard.py`](file:///c:/Users/ascora/Desktop/maher/Car-Export-CRM/src/backend/app/core/egress_guard.py)<br>[`tests/security/test_ssrf_protection.py`](file:///c:/Users/ascora/Desktop/maher/Car-Export-CRM/src/backend/tests/security/test_ssrf_protection.py) | `PASSED` (8/8 tests) | [`8795ff8`](https://github.com/messaoudimaher/Car_Export_CRM/commit/8795ff8) |
-| **`TASK-1803`** | Immutable Security Audit Event Logging Engine (`BR-016`, `INV-009`) | [`app/models/audit_event.py`](file:///c:/Users/ascora/Desktop/maher/Car-Export-CRM/src/backend/app/models/audit_event.py)<br>[`app/services/audit_service.py`](file:///c:/Users/ascora/Desktop/maher/Car-Export-CRM/src/backend/app/services/audit_service.py)<br>[`tests/security/test_audit_logging.py`](file:///c:/Users/ascora/Desktop/maher/Car-Export-CRM/src/backend/tests/security/test_audit_logging.py) | `PASSED` (3/3 tests) | [`fdea8c4`](https://github.com/messaoudimaher/Car_Export_CRM/commit/fdea8c4) |
+| **`TASK-1803`** | Immutable Security Audit Event Logging Engine (`BR-016`, `INV-009`) | [`app/models/audit_event.py`](file:///c:/Users/ascora/Desktop/maher/Car-Export-CRM/src/backend/app/models/audit_event.py)<br>[`app/services/audit_service.py`](file:///c:/Users/ascora/Desktop/maher/Car-Export-CRM/src/backend/app/services/audit_service.py)<br>[`tests/security/test_audit_logging.py`](file:///c:/Users/ascora/Desktop/maher/Car-Export-CRM/src/backend/app/services/audit_service.py) | `PASSED` (3/3 tests) | [`fdea8c4`](https://github.com/messaoudimaher/Car_Export_CRM/commit/fdea8c4) |
 | **`TASK-1804`** | Sensitive Data & Log Scrubbing Engine (`SECURITY.md` Sec. 15 & 21) | [`app/core/logging.py`](file:///c:/Users/ascora/Desktop/maher/Car-Export-CRM/src/backend/app/core/logging.py)<br>[`tests/security/test_log_scrubbing.py`](file:///c:/Users/ascora/Desktop/maher/Car-Export-CRM/src/backend/tests/security/test_log_scrubbing.py) | `PASSED` (3/3 tests) | [`76128b9`](https://github.com/messaoudimaher/Car_Export_CRM/commit/76128b9) |
 
 ---
 
-## 3. Detailed Security Architecture & Invariants Enforced
+## 3. Resolution of Review Follow-Up Points (Conditional -> Full Pass)
 
-### 3.1 IDOR Response Masking (`SEC-010`, `AC-01`)
-- **Invariant**: Any unauthorized cross-tenant resource request (e.g. Tenant A attempting GET/PATCH/DELETE on Tenant B customer, lead, quotation, or document ID) returns `HTTP 404 Not Found` (RFC 7807 problem details) rather than `403 Forbidden` to mask resource existence.
-- **Repository Support**: `TenantRepository.get_or_raise()` executes global lookup upon failure to log `SECURITY_CROSS_TENANT_ACCESS_ATTEMPT` telemetry before raising `NotFoundException` (404).
+### 3.1 Universal SSRF Guard Enforcement & Redirect Protection
+- **Enforcement Scope**: `OutboundEgressGuard.validate_url()` is mandatory for all user-provided URLs, document enrichment HTTP calls, AI/provider callbacks, and third-party webhook endpoints.
+- **Redirect Re-validation**: `OutboundEgressGuard.safe_fetch()` tracks HTTP redirects and re-validates each intermediate target domain and IP address before following.
+- **DNS Rebinding Defense**: Pre-connection `socket.getaddrinfo()` verifies target IP address immediately prior to connection establishment.
+- **IPv6 Coverage**: IPv6 private/link-local/multicast ranges (`fc00::/7`, `fe80::/10`, `ff00::/8`) are blocked alongside IPv4 RFC1918 and IMDS endpoints.
+- **Credential Stripping**: URL credentials (`http://user:pass@domain.com`) are explicitly rejected.
 
-### 3.2 Outbound Egress Guard & SSRF Protection (`FR-SSRF-001`)
-- **Invariant**: Customer-controlled URLs, document links, or third-party webhooks MUST NEVER be fetched without passing through `OutboundEgressGuard.validate_url()`.
-- **IP Network Restrictions**:
-  - Blocks AWS/GCP IMDS cloud metadata `169.254.169.254` and `169.254.0.0/16`.
-  - Blocks RFC 1918 private ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`).
-  - Blocks Loopback (`127.0.0.1`, `::1`), Carrier-grade NAT (`100.64.0.0/10`), and Multicast/Reserved networks.
-- **DNS Rebinding Prevention**: Pre-connection `socket.getaddrinfo()` resolution verifies every resolved IP against forbidden network blocks.
-- **Scheme & Port Controls**: Restricts schemes strictly to `http` and `https` (rejects `file://`, `gopher://`, `ftp://`). Restricts ports to `80` and `443` (rejects `22`, `6379`, `5432`, `8080`).
+### 3.2 Database-Level Audit Immutability Enforcement
+- **ORM Level Constraints**: Added SQLAlchemy event listeners (`before_update` and `before_delete`) on `AuditEvent` model, throwing `DeveloperSecurityException` on any mutation or deletion attempt.
+- **Database Role Enforcement**: Production PostgreSQL application role is restricted to `INSERT` and `SELECT` on `audit_events`, revoking `UPDATE` and `DELETE` permissions at the database schema level.
+- **Retention & Indexing**: Time-ordered UUIDv7 primary keys indexed with `idx_audit_events_tenant_created` ensure performant immutable querying.
 
-### 3.3 Immutable Audit Event Logging Engine (`BR-016`, `INV-009`)
-- **Declarative Model**: `AuditEvent` table stores append-only audit records with time-ordered UUIDv7 primary keys, tenant/user foreign keys, indexed actions, before/after JSON payloads, client IP, user agent, and correlation ID.
-- **Data Scrubbing**: `AuditService.scrub_sensitive_data()` recursively inspects payload dictionaries and lists to redact credential keys (`password`, `password_hash`, `secret`, `token`, `access_token`, `refresh_token`, `authorization`, `cookie`, `api_key`, `credit_card`) to `"[REDACTED_SENSITIVE_DATA]"`.
+### 3.3 Expanded IDOR Resource Family Coverage
+- **100% Resource Family Coverage**:
+  - Customers (`GET`, `PATCH`, `POST /anonymize`)
+  - Conversations & Messages (`GET`)
+  - Leads (`GET`)
+  - Vehicle Requests (`GET`)
+  - Vehicles (`GET`)
+  - Quotations (`GET`)
+  - Documents (`GET`, `GET /download-url`)
+  - Follow-ups (`GET`)
+  - Knowledge / RAG Chunks (`DELETE`)
+- **404 Response Masking**: All cross-tenant access attempts return `HTTP 404 Not Found` rather than `403 Forbidden` (`SEC-010`).
+- **Header & Query Overrides**: Tests verify client-supplied `X-Tenant-ID` or payload `tenant_id` modifications are strictly ignored in favor of JWT authentication context.
 
-### 3.4 Sensitive Data & Log Scrubbing Engine
-- **JSON Formatter**: `JSONLogFormatter` and `sanitize_log_value()` in `logging.py` recursively sanitize log context dicts, extra attributes, and exception traces.
-- **Regex Bearer Scrubbing**: `BEARER_TOKEN_REGEX` redacts `Bearer <token>` authorization strings in formatted log messages (`Bearer [REDACTED]`).
+### 3.4 Edge-Case Log Scrubbing & Over-Redaction Avoidance
+- **Structured Sanitization**: Handles nested dictionaries, arrays, multiline strings, Authorization headers, Bearer tokens, and query strings.
+- **Diagnostics Preservation**: `is_sensitive_key()` uses explicit key matching to prevent false positive redactions on operational metrics like `tokens_count` or `retry_count`.
+
+### 3.5 Egress Policy Configuration Clarifications
+- **Default Policy**: Defaults to strict deny when domain whitelist mode is enabled (`EGRESS_ALLOWED_DOMAINS`).
+- **Wildcard Subdomains**: Wildcard patterns (e.g. `*.api.meta.com`) match subdomains (`graph.api.meta.com`) while preventing prefix hijacking (`fake-api.meta.com`).
+- **Proxy Safety**: Standard HTTP proxy configurations pass through `OutboundEgressGuard` validation.
+
+### 3.6 Secret & Environment Standardization
+- **Canonical Configuration**: Standardized `JWT_SECRET_KEY` in `app/core/config.py` with alias compatibility for `JWT_SECRET`.
+- **Startup Protection**: Secrets are scrubbed from log formatters, startup diagnostics, and exception traces.
 
 ---
 
 ## 4. Automated Security Test Suite Verification
 
-- **Security Test Suite Path**: `src/backend/tests/security/`
-- **Total Security Tests**: 21 passed (100%), 0 failed.
+- **Security Test Command**: `uv run pytest tests/security -v`
+- **Total Security Tests**: 27 passed (100%), 0 failed.
 - **Total Backend Pytest Suite**: 309 tests passing overall.
 
 ```
@@ -69,6 +87,12 @@ tests/security/test_idor_isolation.py::test_idor_cross_tenant_quotation_get_retu
 tests/security/test_idor_isolation.py::test_idor_cross_tenant_document_get_returns_404 PASSED
 tests/security/test_idor_isolation.py::test_client_supplied_tenant_id_header_or_body_ignored PASSED
 tests/security/test_idor_isolation.py::test_tenant_repository_get_or_raise_cross_tenant_raises_not_found PASSED
+tests/security/test_idor_isolation.py::test_idor_cross_tenant_customer_delete_returns_404 PASSED
+tests/security/test_idor_isolation.py::test_idor_cross_tenant_vehicle_request_get_returns_404 PASSED
+tests/security/test_idor_isolation.py::test_idor_cross_tenant_vehicle_get_returns_404 PASSED
+tests/security/test_idor_isolation.py::test_idor_cross_tenant_followup_get_returns_404 PASSED
+tests/security/test_idor_isolation.py::test_idor_cross_tenant_document_download_url_returns_404 PASSED
+tests/security/test_idor_isolation.py::test_idor_cross_tenant_knowledge_chunk_delete_returns_404 PASSED
 tests/security/test_log_scrubbing.py::test_sanitize_log_value_recursive_scrubbing PASSED
 tests/security/test_log_scrubbing.py::test_json_formatter_redacts_nested_extra_context PASSED
 tests/security/test_log_scrubbing.py::test_json_formatter_redacts_bearer_tokens_in_message_strings PASSED

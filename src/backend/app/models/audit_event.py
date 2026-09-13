@@ -99,3 +99,23 @@ class AuditEvent(Base):
         """Initialize AuditEvent entity setting default attribute states."""
         kw.setdefault("resource_type", "System")
         super().__init__(**kw)
+
+
+from sqlalchemy import event
+from app.core.errors import DeveloperSecurityException
+
+
+@event.listens_for(AuditEvent, "before_update")
+def block_audit_event_update(mapper: Any, connection: Any, target: AuditEvent) -> None:
+    """Block ORM UPDATE operations on AuditEvent instances (BR-016, INV-009)."""
+    raise DeveloperSecurityException(
+        "SECURITY_AUDIT_IMMUTABILITY_VIOLATION: AuditEvent records are append-only. UPDATE operations are strictly prohibited (BR-016, INV-009)."
+    )
+
+
+@event.listens_for(AuditEvent, "before_delete")
+def block_audit_event_delete(mapper: Any, connection: Any, target: AuditEvent) -> None:
+    """Block ORM DELETE operations on AuditEvent instances (BR-016, INV-009)."""
+    raise DeveloperSecurityException(
+        "SECURITY_AUDIT_IMMUTABILITY_VIOLATION: AuditEvent records are append-only. DELETE operations are strictly prohibited (BR-016, INV-009)."
+    )

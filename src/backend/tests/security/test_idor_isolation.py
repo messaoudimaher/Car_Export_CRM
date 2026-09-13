@@ -366,3 +366,253 @@ async def test_tenant_repository_get_or_raise_cross_tenant_raises_not_found(
 
     assert exc_info.value.status_code == 404
     assert "Customer" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_idor_cross_tenant_customer_delete_returns_404(
+    mock_db_session: AsyncMock,
+    tenant_a_user_and_token: tuple[User, uuid.UUID, str],
+) -> None:
+    """DELETE /api/v1/customers/{id} for Tenant B customer ID returns HTTP 404 Not Found (SEC-010)."""
+    _user_a, tenant_a_id, token_a = tenant_a_user_and_token
+    tenant_b_id = uuid.uuid4()
+    customer_b_id = uuid.uuid4()
+
+    customer_b = Customer(
+        id=customer_b_id,
+        tenant_id=tenant_b_id,
+        phone_e164="+21698765432",
+        whatsapp_id="21698765432",
+        full_name="Target Customer B",
+    )
+
+    mock_exec_none = MagicMock()
+    mock_exec_none.scalar_one_or_none.return_value = None
+
+    mock_exec_global = MagicMock()
+    mock_exec_global.scalar_one_or_none.return_value = customer_b
+
+    mock_db_session.execute.side_effect = [mock_exec_none, mock_exec_global]
+
+    # Change user_a role to SuperAdmin to pass RBAC check and hit IDOR isolation check
+    _user_a.role = UserRole.SUPER_ADMIN
+    mock_db_session.get.return_value = _user_a
+
+    app = create_security_test_app(mock_db_session)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        response = await client.post(
+            f"/api/v1/customers/{customer_b_id}/anonymize",
+            json={"reason": "Test cross-tenant erasure request"},
+            headers={"Authorization": f"Bearer {token_a}"},
+        )
+
+    assert response.status_code == 404
+    assert response.headers["content-type"] == "application/problem+json"
+
+
+@pytest.mark.asyncio
+async def test_idor_cross_tenant_vehicle_request_get_returns_404(
+    mock_db_session: AsyncMock,
+    tenant_a_user_and_token: tuple[User, uuid.UUID, str],
+) -> None:
+    """GET /api/v1/vehicle-requests/{id} for Tenant B request returns HTTP 404 (SEC-010)."""
+    _user_a, tenant_a_id, token_a = tenant_a_user_and_token
+    tenant_b_id = uuid.uuid4()
+    request_b_id = uuid.uuid4()
+
+    from app.models.vehicle_request import VehicleRequest
+
+    req_b = VehicleRequest(
+        id=request_b_id,
+        tenant_id=tenant_b_id,
+        customer_id=uuid.uuid4(),
+        brand="BMW",
+        model="X5",
+    )
+
+    mock_exec_none = MagicMock()
+    mock_exec_none.scalar_one_or_none.return_value = None
+
+    mock_exec_global = MagicMock()
+    mock_exec_global.scalar_one_or_none.return_value = req_b
+
+    mock_db_session.execute.side_effect = [mock_exec_none, mock_exec_global]
+
+    app = create_security_test_app(mock_db_session)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        response = await client.get(
+            f"/api/v1/vehicle-requests/{request_b_id}",
+            headers={"Authorization": f"Bearer {token_a}"},
+        )
+
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_idor_cross_tenant_vehicle_get_returns_404(
+    mock_db_session: AsyncMock,
+    tenant_a_user_and_token: tuple[User, uuid.UUID, str],
+) -> None:
+    """GET /api/v1/vehicles/{id} for Tenant B vehicle returns HTTP 404 (SEC-010)."""
+    _user_a, tenant_a_id, token_a = tenant_a_user_and_token
+    tenant_b_id = uuid.uuid4()
+    vehicle_b_id = uuid.uuid4()
+
+    from app.models.vehicle import Vehicle
+
+    veh_b = Vehicle(
+        id=vehicle_b_id,
+        tenant_id=tenant_b_id,
+        vin="WBA1234567890ABCD",
+        make="Porsche",
+        model="Macan",
+    )
+
+    mock_exec_none = MagicMock()
+    mock_exec_none.scalar_one_or_none.return_value = None
+
+    mock_exec_global = MagicMock()
+    mock_exec_global.scalar_one_or_none.return_value = veh_b
+
+    mock_db_session.execute.side_effect = [mock_exec_none, mock_exec_global]
+
+    app = create_security_test_app(mock_db_session)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        response = await client.get(
+            f"/api/v1/vehicles/{vehicle_b_id}",
+            headers={"Authorization": f"Bearer {token_a}"},
+        )
+
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_idor_cross_tenant_followup_get_returns_404(
+    mock_db_session: AsyncMock,
+    tenant_a_user_and_token: tuple[User, uuid.UUID, str],
+) -> None:
+    """GET /api/v1/followups/{id} for Tenant B follow-up task returns HTTP 404 (SEC-010)."""
+    _user_a, tenant_a_id, token_a = tenant_a_user_and_token
+    tenant_b_id = uuid.uuid4()
+    followup_b_id = uuid.uuid4()
+
+    from app.models.followup import FollowUp
+
+    follow_b = FollowUp(
+        id=followup_b_id,
+        tenant_id=tenant_b_id,
+        lead_id=uuid.uuid4(),
+        title="Follow up with customer",
+    )
+
+    mock_exec_none = MagicMock()
+    mock_exec_none.scalar_one_or_none.return_value = None
+
+    mock_exec_global = MagicMock()
+    mock_exec_global.scalar_one_or_none.return_value = follow_b
+
+    mock_db_session.execute.side_effect = [mock_exec_none, mock_exec_global]
+
+    app = create_security_test_app(mock_db_session)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        response = await client.get(
+            f"/api/v1/followups/{followup_b_id}",
+            headers={"Authorization": f"Bearer {token_a}"},
+        )
+
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_idor_cross_tenant_document_download_url_returns_404(
+    mock_db_session: AsyncMock,
+    tenant_a_user_and_token: tuple[User, uuid.UUID, str],
+) -> None:
+    """GET /api/v1/documents/{id}/download-url for Tenant B document returns HTTP 404 (SEC-006, SEC-010)."""
+    _user_a, tenant_a_id, token_a = tenant_a_user_and_token
+    tenant_b_id = uuid.uuid4()
+    doc_b_id = uuid.uuid4()
+
+    doc_b = Document(
+        id=doc_b_id,
+        tenant_id=tenant_b_id,
+        file_name="Passport_Scan_TenantB.pdf",
+        object_key="tenants/b/docs/passport.pdf",
+        category="Passport",
+        mime_type="application/pdf",
+        file_size_bytes=1024,
+        sha256_hash="abc123def456",
+        scan_status="Passed",
+    )
+
+    mock_exec_none = MagicMock()
+    mock_exec_none.scalar_one_or_none.return_value = None
+
+    mock_exec_global = MagicMock()
+    mock_exec_global.scalar_one_or_none.return_value = doc_b
+
+    mock_db_session.execute.side_effect = [mock_exec_none, mock_exec_global]
+
+    app = create_security_test_app(mock_db_session)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        response = await client.get(
+            f"/api/v1/documents/{doc_b_id}/download-url",
+            headers={"Authorization": f"Bearer {token_a}"},
+        )
+
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_idor_cross_tenant_knowledge_chunk_delete_returns_404(
+    mock_db_session: AsyncMock,
+    tenant_a_user_and_token: tuple[User, uuid.UUID, str],
+) -> None:
+    """DELETE /api/v1/knowledge/chunks/{id} for Tenant B knowledge chunk returns HTTP 404 (SEC-007, SEC-010)."""
+    _user_a, tenant_a_id, token_a = tenant_a_user_and_token
+    tenant_b_id = uuid.uuid4()
+    chunk_b_id = uuid.uuid4()
+
+    from app.models.knowledge import KnowledgeEmbedding
+
+    chunk_b = KnowledgeEmbedding(
+        id=chunk_b_id,
+        tenant_id=tenant_b_id,
+        document_id="doc_rag_b",
+        chunk_text="Tenant B export regulation details",
+    )
+
+    mock_exec_none = MagicMock()
+    mock_exec_none.scalar_one_or_none.return_value = None
+
+    mock_exec_global = MagicMock()
+    mock_exec_global.scalar_one_or_none.return_value = chunk_b
+
+    mock_db_session.execute.side_effect = [mock_exec_none, mock_exec_global]
+
+    app = create_security_test_app(mock_db_session)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        response = await client.delete(
+            f"/api/v1/knowledge/chunks/{chunk_b_id}",
+            headers={"Authorization": f"Bearer {token_a}"},
+        )
+
+    assert response.status_code == 404
