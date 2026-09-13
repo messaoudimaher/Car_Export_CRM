@@ -177,6 +177,8 @@ def test_settings_fails_fast_when_openai_key_missing_in_prod() -> None:
             LLM_PROVIDER_API_KEY="",
             JWT_SECRET="prod_secret_key_satisfying_length_32_bytes_long",  # noqa: S106
             META_WEBHOOK_APP_SECRET="prod_meta_secret_key_12345",  # noqa: S106
+            S3_ACCESS_KEY_ID="prod_s3_access_key_id_12345",  # noqa: S106
+            S3_SECRET_ACCESS_KEY="prod_s3_secret_access_key_12345",  # noqa: S106
         )
 
 

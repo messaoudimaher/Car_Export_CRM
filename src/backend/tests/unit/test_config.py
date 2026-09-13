@@ -29,6 +29,8 @@ def test_environment_helper_properties() -> None:
         JWT_SECRET="prod_super_secure_jwt_secret_key_1234567890",  # noqa: S106
         META_WEBHOOK_APP_SECRET="prod_meta_secret_99999",  # noqa: S106
         LLM_PROVIDER_API_KEY="prod_llm_key_88888",  # noqa: S106
+        S3_ACCESS_KEY_ID="prod_s3_access_key_id_12345",  # noqa: S106
+        S3_SECRET_ACCESS_KEY="prod_s3_secret_access_key_12345",  # noqa: S106
     )
     assert prod_settings.is_production is True
     assert prod_settings.is_development is False
@@ -84,6 +86,8 @@ def test_production_environment_rejects_dev_placeholder_secrets() -> None:
         Settings(
             ENVIRONMENT="production",
             JWT_SECRET="dev_jwt_secret_key_change_me_in_production_min_32_bytes_long",  # noqa: S106
+            S3_ACCESS_KEY_ID="prod_s3_access_key_id_12345",  # noqa: S106
+            S3_SECRET_ACCESS_KEY="prod_s3_secret_access_key_12345",  # noqa: S106
         )
     assert "Insecure default JWT_SECRET is forbidden in production environment" in str(
         exc_info.value
@@ -97,6 +101,8 @@ def test_production_environment_accepts_valid_secrets() -> None:
         JWT_SECRET="prod_super_secure_jwt_secret_key_1234567890",  # noqa: S106
         META_WEBHOOK_APP_SECRET="prod_meta_app_secret_value_12345",  # noqa: S106
         LLM_PROVIDER_API_KEY="prod_llm_provider_api_key_67890",  # noqa: S106
+        S3_ACCESS_KEY_ID="prod_s3_access_key_id_12345",  # noqa: S106
+        S3_SECRET_ACCESS_KEY="prod_s3_secret_access_key_12345",  # noqa: S106
     )
     assert prod_settings.is_production is True
 
