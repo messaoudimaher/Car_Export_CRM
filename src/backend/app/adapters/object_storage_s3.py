@@ -69,8 +69,8 @@ class S3StorageAdapter(ObjectStorageProvider):
                 f"Failed to retrieve object from storage: {err}"
             ) from err
 
-    async def generate_presigned_url(self, object_key: str, expiration_seconds: int = 3600) -> str:
-        """Generate a short-lived S3 / MinIO presigned URL."""
+    async def generate_presigned_url(self, object_key: str, expiration_seconds: int = 900) -> str:
+        """Generate a short-lived S3 / MinIO presigned URL (default 15m)."""
         self.validate_object_key(object_key)
         try:
             url: str = self.s3_client.generate_presigned_url(
@@ -81,6 +81,44 @@ class S3StorageAdapter(ObjectStorageProvider):
             return url
         except ClientError as err:
             raise ServiceUnavailableException(f"Failed to generate presigned URL: {err}") from err
+
+    async def generate_presigned_upload_url(
+        self, object_key: str, content_type: str, expiration_seconds: int = 900
+    ) -> dict[str, str]:
+        """Generate a short-lived S3 / MinIO presigned upload URL or POST fields."""
+        self.validate_object_key(object_key)
+        try:
+            url: str = self.s3_client.generate_presigned_url(
+                "put_object",
+                Params={
+                    "Bucket": self.bucket_name,
+                    "Key": object_key,
+                    "ContentType": content_type,
+                },
+                ExpiresIn=expiration_seconds,
+            )
+            return {
+                "upload_url": url,
+                "key": object_key,
+                "content_type": content_type,
+                "expires_in_seconds": str(expiration_seconds),
+            }
+        except ClientError as err:
+            raise ServiceUnavailableException(
+                f"Failed to generate presigned upload URL: {err}"
+            ) from err
+
+    async def object_exists(self, object_key: str) -> bool:
+        """Check if object exists in S3 / MinIO storage using head_object."""
+        self.validate_object_key(object_key)
+        try:
+            self.s3_client.head_object(Bucket=self.bucket_name, Key=object_key)
+            return True
+        except ClientError as err:
+            error_code = err.response.get("Error", {}).get("Code", "")
+            if error_code in ("404", "NoSuchKey", "403"):
+                return False
+            return False
 
     async def delete_object(self, object_key: str) -> bool:
         """Delete object from S3 / MinIO bucket."""

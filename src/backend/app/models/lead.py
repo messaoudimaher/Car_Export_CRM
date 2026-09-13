@@ -13,6 +13,7 @@ from app.models.base import Base
 
 if TYPE_CHECKING:
     from app.models.customer import Customer
+    from app.models.document import Document
     from app.models.followup import FollowUp
     from app.models.quotation import Quotation
     from app.models.tenant import Tenant
@@ -160,6 +161,11 @@ class Lead(Base):
         "FollowUp",
         back_populates="lead",
         cascade="all, delete-orphan",
+    )
+
+    documents: Mapped[list["Document"]] = relationship(
+        "Document",
+        back_populates="lead",
     )
 
     def __init__(self, **kw: object) -> None:

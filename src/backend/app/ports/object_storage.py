@@ -58,15 +58,41 @@ class ObjectStorageProvider(ABC):
         """
 
     @abstractmethod
-    async def generate_presigned_url(self, object_key: str, expiration_seconds: int = 3600) -> str:
-        """Generate a short-lived presigned URL for authorized private access.
+    async def generate_presigned_url(self, object_key: str, expiration_seconds: int = 900) -> str:
+        """Generate a short-lived presigned URL for authorized private access (default 15m).
 
         Args:
             object_key: Storage object key path.
-            expiration_seconds: URL validity lifetime in seconds (default 3600).
+            expiration_seconds: URL validity lifetime in seconds (default 900).
 
         Returns:
             str: Temporary presigned authorized URL string.
+        """
+
+    @abstractmethod
+    async def generate_presigned_upload_url(
+        self, object_key: str, content_type: str, expiration_seconds: int = 900
+    ) -> dict[str, str]:
+        """Generate a short-lived presigned upload URL or POST params for direct upload.
+
+        Args:
+            object_key: Storage object key path.
+            content_type: MIME content type string.
+            expiration_seconds: URL validity lifetime in seconds (default 900).
+
+        Returns:
+            dict[str, str]: Dictionary containing upload_url and parameters.
+        """
+
+    @abstractmethod
+    async def object_exists(self, object_key: str) -> bool:
+        """Check whether an object exists in private storage.
+
+        Args:
+            object_key: Storage object key path.
+
+        Returns:
+            bool: True if object exists, False otherwise.
         """
 
     @abstractmethod

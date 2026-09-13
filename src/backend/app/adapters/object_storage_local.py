@@ -42,12 +42,33 @@ class LocalStorageAdapter(ObjectStorageProvider):
             raise NotFoundException(f"Object '{object_key}' not found in local storage")
         return path.read_bytes()
 
-    async def generate_presigned_url(self, object_key: str, expiration_seconds: int = 3600) -> str:
+    async def generate_presigned_url(self, object_key: str, expiration_seconds: int = 900) -> str:
         """Generate a simulated local access URL for authorized object viewing."""
         path = self._resolve_path(object_key)
         if not path.is_file():
             raise NotFoundException(f"Object '{object_key}' not found in local storage")
-        return f"file:///{path.as_posix()}"
+        return f"file:///{path.as_posix()}?expires_in={expiration_seconds}"
+
+    async def generate_presigned_upload_url(
+        self, object_key: str, content_type: str, expiration_seconds: int = 900
+    ) -> dict[str, str]:
+        """Generate a simulated local upload target parameters dict for dev/testing."""
+        path = self._resolve_path(object_key)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return {
+            "upload_url": f"http://localhost:8000/api/v1/documents/upload-local?key={object_key}",
+            "key": object_key,
+            "content_type": content_type,
+            "expires_in_seconds": str(expiration_seconds),
+        }
+
+    async def object_exists(self, object_key: str) -> bool:
+        """Check if object file exists on local storage."""
+        try:
+            path = self._resolve_path(object_key)
+            return path.is_file()
+        except NotFoundException:
+            return False
 
     async def delete_object(self, object_key: str) -> bool:
         """Delete file from local storage directory."""

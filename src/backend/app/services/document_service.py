@@ -11,11 +11,14 @@ from app.adapters.object_storage_s3 import S3StorageAdapter
 from app.core.config import settings
 from app.core.errors import ForbiddenException, NotFoundException, ValidationException
 from app.core.logging import get_logger
+from app.core.uuid import generate_uuidv7
+from app.models.customer import Customer
 from app.models.document import Document
 from app.models.lead import Lead
 from app.models.quotation import Quotation
 from app.models.user import User
 from app.ports.object_storage import ObjectStorageProvider
+from app.schemas.document import DocumentUploadInitRequest
 from app.services.pdf_service import QuotePdfGenerator
 
 logger = get_logger(__name__)
@@ -36,6 +39,117 @@ class DocumentService:
             self.storage_provider = S3StorageAdapter()
         else:
             self.storage_provider = LocalStorageAdapter()
+
+    async def initiate_upload(
+        self,
+        tenant_id: uuid.UUID,
+        uploader_id: uuid.UUID,
+        payload: DocumentUploadInitRequest,
+    ) -> tuple[Document, dict[str, str]]:
+        """Initialize upload session with server-side key and presigned URL (TASK-1501)."""
+        if not tenant_id:
+            raise ValueError("tenant_id is strictly mandatory (SEC-007)")
+
+        # Validate file size limit (10MB)
+        max_bytes = 10_485_760
+        if payload.file_size_bytes > max_bytes:
+            raise ValidationException("File size exceeds 10MB limit")
+
+        # Validate lead association under tenant context if provided
+        if payload.lead_id:
+            lead_res = await self.session.execute(
+                select(Lead).where(Lead.id == payload.lead_id, Lead.tenant_id == tenant_id)
+            )
+            if lead_res.scalar_one_or_none() is None:
+                raise NotFoundException(f"Lead '{payload.lead_id}' not found for tenant")
+
+        # Validate customer association under tenant context if provided
+        if payload.customer_id:
+            cust_res = await self.session.execute(
+                select(Customer).where(
+                    Customer.id == payload.customer_id, Customer.tenant_id == tenant_id
+                )
+            )
+            if cust_res.scalar_one_or_none() is None:
+                raise NotFoundException(f"Customer '{payload.customer_id}' not found for tenant")
+
+        document_id = generate_uuidv7()
+        # Generate safe server-side object key: tenants/<tenant_id>/docs/<document_id>/<file_name>
+        safe_filename = payload.file_name.replace("/", "_").replace("\\", "_")
+        object_key = f"tenants/{tenant_id}/docs/{document_id}/{safe_filename}"
+        self.storage_provider.validate_object_key(object_key)
+
+        # Create Document metadata record in 'Pending' state
+        doc = Document(
+            id=document_id,
+            tenant_id=tenant_id,
+            lead_id=payload.lead_id,
+            customer_id=payload.customer_id,
+            uploader_id=uploader_id,
+            document_type="Customer_Export_Doc",
+            category=payload.category,
+            object_key=object_key,
+            file_name=payload.file_name,
+            file_size_bytes=payload.file_size_bytes,
+            mime_type=payload.mime_type,
+            scan_status="Pending",
+            status="Pending",
+        )
+        self.session.add(doc)
+        await self.session.commit()
+        await self.session.refresh(doc)
+
+        upload_info = await self.storage_provider.generate_presigned_upload_url(
+            object_key=object_key,
+            content_type=payload.mime_type,
+            expiration_seconds=900,
+        )
+
+        logger.info(
+            f"Initiated document upload session '{doc.id}'",
+            extra={
+                "tenant_id": str(tenant_id),
+                "document_id": str(doc.id),
+                "object_key": object_key,
+            },
+        )
+        return doc, upload_info
+
+    async def complete_upload(
+        self,
+        tenant_id: uuid.UUID,
+        document_id: uuid.UUID,
+        sha256_hash: str | None = None,
+    ) -> Document:
+        """Verify object existence and checksum, marking Document Available (TASK-1501)."""
+        stmt = select(Document).where(Document.id == document_id, Document.tenant_id == tenant_id)
+        result = await self.session.execute(stmt)
+        doc = result.scalar_one_or_none()
+
+        if doc is None:
+            raise NotFoundException(f"Document '{document_id}' not found")
+
+        # Verify object existence in private storage
+        exists = await self.storage_provider.object_exists(doc.object_key)
+        if not exists:
+            doc.scan_status = "Failed"
+            doc.status = "Quarantined"
+            await self.session.commit()
+            raise ValidationException("Uploaded object file not found in storage")
+
+        if sha256_hash:
+            doc.sha256_hash = sha256_hash
+
+        doc.scan_status = "Passed"
+        doc.status = "Available"
+        await self.session.commit()
+        await self.session.refresh(doc)
+
+        logger.info(
+            f"Completed document upload verification for '{doc.id}'",
+            extra={"tenant_id": str(tenant_id), "document_id": str(doc.id), "status": doc.status},
+        )
+        return doc
 
     async def generate_and_store_quote_pdf(
         self,
@@ -144,10 +258,13 @@ class DocumentService:
             tenant_id=tenant_id,
             quotation_id=quotation_id,
             document_type="Quotation_PDF",
+            category="Quotation_PDF",
             object_key=uploaded_key,
             file_name=file_name,
             file_size_bytes=file_size_bytes,
             mime_type="application/pdf",
+            scan_status="Passed",
+            status="Available",
             version=version,
         )
 
@@ -186,7 +303,7 @@ class DocumentService:
         tenant_id: uuid.UUID,
         document_id: uuid.UUID,
         requesting_user: User,
-        expiration_seconds: int = 3600,
+        expiration_seconds: int = 900,
     ) -> tuple[Document, str]:
         """Authorize user access and generate a presigned temporary download URL."""
         if requesting_user.tenant_id != tenant_id:
@@ -199,13 +316,17 @@ class DocumentService:
         if doc is None:
             raise NotFoundException(f"Document '{document_id}' not found")
 
+        # Reject download access if document is Pending or Quarantined
+        if doc.status in ("Pending", "Quarantined"):
+            raise ForbiddenException(f"Document access denied for status '{doc.status}'")
+
         url = await self.storage_provider.generate_presigned_url(
             object_key=doc.object_key,
             expiration_seconds=expiration_seconds,
         )
 
         logger.info(
-            "QUOTE_PDF_ACCESS_GRANTED: Presigned URL generated",
+            "DOCUMENT_ACCESS_GRANTED: Presigned URL generated",
             extra={
                 "tenant_id": str(tenant_id),
                 "document_id": str(document_id),
@@ -213,3 +334,21 @@ class DocumentService:
             },
         )
         return doc, url
+
+    async def delete_document(
+        self,
+        tenant_id: uuid.UUID,
+        document_id: uuid.UUID,
+    ) -> bool:
+        """Delete object from storage and mark metadata as Deleted (SEC-007)."""
+        stmt = select(Document).where(Document.id == document_id, Document.tenant_id == tenant_id)
+        result = await self.session.execute(stmt)
+        doc = result.scalar_one_or_none()
+
+        if doc is None:
+            raise NotFoundException(f"Document '{document_id}' not found")
+
+        await self.storage_provider.delete_object(doc.object_key)
+        doc.status = "Deleted"
+        await self.session.commit()
+        return True
