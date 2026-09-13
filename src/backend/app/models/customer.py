@@ -1,9 +1,10 @@
 """Customer Entity Model adhering to ADR 0005, BR-001, BR-014 & database specs."""
 
 import uuid
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, ForeignKey, Index, String, Text, UniqueConstraint, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -94,6 +95,28 @@ class Customer(Base):
         Text,
         nullable=True,
         comment="Agent operational notes on customer",
+    )
+
+    is_anonymized: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=text("false"),
+        default=False,
+        comment="GDPR right-to-erasure anonymization status indicator",
+    )
+
+    anonymized_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="UTC timestamp when customer PII was anonymized under GDPR request",
+    )
+
+    legal_hold: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=text("false"),
+        default=False,
+        comment="Legal retention hold flag preventing automated PII erasure",
     )
 
     # Relationships
