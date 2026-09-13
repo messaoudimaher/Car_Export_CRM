@@ -3,6 +3,7 @@
 import contextvars
 import json
 import logging
+import re
 import sys
 from typing import Any
 
@@ -46,31 +47,88 @@ def set_user_id(user_id: str) -> contextvars.Token[str | None]:
     return user_id_ctx.set(user_id)
 
 
+BEARER_TOKEN_REGEX = re.compile(r"(Bearer\s+)[A-Za-z0-9\-\._~\+\/]+=*", re.IGNORECASE)
+REDACTED_TEXT = "[REDACTED]"
+
+SENSITIVE_KEYS = {
+    "password",
+    "password_hash",
+    "pass",
+    "pwd",
+    "secret",
+    "jwt_secret",
+    "api_key",
+    "x-api-key",
+    "access_token",
+    "refresh_token",
+    "auth_token",
+    "session_token",
+    "authorization",
+    "cookie",
+    "set-cookie",
+    "whatsapp_app_secret",
+    "meta_app_secret",
+    "meta_webhook_app_secret",
+    "meta_webhook_verify_token",
+    "s3_secret_access_key",
+    "llm_provider_api_key",
+    "embedding_provider_api_key",
+    "credit_card",
+    "card_number",
+    "cvv",
+}
+
+
+def is_sensitive_key(key_name: str) -> bool:
+    """Determine whether a dictionary key represents a sensitive credential field."""
+    k = key_name.lower()
+    if k in {"token", "jwt", "bearer"}:
+        return True
+    if any(sensitive in k for sensitive in SENSITIVE_KEYS):
+        return True
+    return False
+
+
+def sanitize_log_value(value: Any) -> Any:
+    """Recursively sanitize dictionary, list, and scalar values for structured logging."""
+    if value is None:
+        return None
+
+    if isinstance(value, dict):
+        sanitized: dict[str, Any] = {}
+        for k, v in value.items():
+            if is_sensitive_key(str(k)):
+                sanitized[k] = REDACTED_TEXT
+            else:
+                sanitized[k] = sanitize_log_value(v)
+        return sanitized
+
+    if isinstance(value, list):
+        return [sanitize_log_value(item) for item in value]
+
+    if isinstance(value, str):
+        if BEARER_TOKEN_REGEX.search(value):
+            return BEARER_TOKEN_REGEX.sub(r"\1" + REDACTED_TEXT, value)
+
+    return value
+
+
 class JSONLogFormatter(logging.Formatter):
     """Custom JSON Formatter injecting correlation tracing and sanitizing sensitive keys."""
 
-    SENSITIVE_KEYS = {
-        "password",
-        "token",
-        "secret",
-        "access_token",
-        "jwt_secret",
-        "api_key",
-        "authorization",
-        "meta_webhook_app_secret",
-        "meta_webhook_verify_token",
-        "s3_secret_access_key",
-        "llm_provider_api_key",
-        "embedding_provider_api_key",
-    }
+    SENSITIVE_KEYS = SENSITIVE_KEYS
 
     def format(self, record: logging.LogRecord) -> str:
+        msg_str = record.getMessage()
+        if BEARER_TOKEN_REGEX.search(msg_str):
+            msg_str = BEARER_TOKEN_REGEX.sub(r"\1" + REDACTED_TEXT, msg_str)
+
         log_data: dict[str, Any] = {
             "timestamp": self.formatTime(record, self.datefmt),
             "level": record.levelname,
             "module": record.module,
             "logger": record.name,
-            "message": record.getMessage(),
+            "message": msg_str,
         }
 
         # Inject context variables if available
@@ -116,14 +174,11 @@ class JSONLogFormatter(logging.Formatter):
                 "thread",
                 "threadName",
             }:
-                # Sanitize sensitive fields
-                key_lower = key.lower()
-                if any(
-                    sensitive in key_lower for sensitive in self.SENSITIVE_KEYS
-                ) and not key_lower.endswith("_tokens"):
-                    log_data[key] = "[REDACTED]"
+                # Sanitize sensitive fields recursively
+                if is_sensitive_key(key):
+                    log_data[key] = REDACTED_TEXT
                 else:
-                    log_data[key] = value
+                    log_data[key] = sanitize_log_value(value)
 
         return json.dumps(log_data)
 
