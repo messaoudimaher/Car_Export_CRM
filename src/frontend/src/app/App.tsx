@@ -1,11 +1,14 @@
 import React from "react";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes, NavLink } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Car, MessageSquare, Users, FileText, CheckCircle2, ShieldCheck } from "lucide-react";
+import { Car, MessageSquare, Users, ShieldCheck, CheckCircle2, Layers } from "lucide-react";
 import { ToastContainer } from "../shared/components/feedback/ToastContainer";
 import { LanguageSelector } from "../shared/components/ui/LanguageSelector";
 import { QueryProvider } from "./providers/QueryProvider";
 import { InboxWorkspace } from "../features/inbox/components/InboxWorkspace";
+import { CustomerListPage } from "../features/customers/pages/CustomerListPage";
+import { LeadListPage } from "../features/leads/pages/LeadListPage";
+import { DocumentListPage } from "../features/documents/pages/DocumentListPage";
 import "../shared/i18n";
 
 const OperationalShell: React.FC = () => {
@@ -19,18 +22,53 @@ const OperationalShell: React.FC = () => {
           <Car className="w-6 h-6" />
         </div>
         <nav className="flex flex-col space-y-4 w-full items-center">
-          <button className="p-2.5 text-crm-primary bg-crm-hover/50 rounded-lg transition-colors" title={t("nav.inbox")}>
+          <NavLink
+            to="/"
+            className={({ isActive }) =>
+              `p-2.5 rounded-lg transition-colors ${
+                isActive ? "text-crm-primary bg-crm-hover/50" : "text-crm-muted hover:text-crm-text hover:bg-crm-hover"
+              }`
+            }
+            title={t("nav.inbox")}
+          >
             <MessageSquare className="w-5 h-5" />
-          </button>
-          <button className="p-2.5 text-crm-muted hover:text-crm-text hover:bg-crm-hover rounded-lg transition-colors" title={t("nav.customers")}>
+          </NavLink>
+
+          <NavLink
+            to="/customers"
+            className={({ isActive }) =>
+              `p-2.5 rounded-lg transition-colors ${
+                isActive ? "text-crm-primary bg-crm-hover/50" : "text-crm-muted hover:text-crm-text hover:bg-crm-hover"
+              }`
+            }
+            title={t("nav.customers")}
+          >
             <Users className="w-5 h-5" />
-          </button>
-          <button className="p-2.5 text-crm-muted hover:text-crm-text hover:bg-crm-hover rounded-lg transition-colors" title={t("nav.quotes")}>
-            <FileText className="w-5 h-5" />
-          </button>
-          <button className="p-2.5 text-crm-muted hover:text-crm-text hover:bg-crm-hover rounded-lg transition-colors" title={t("nav.documents")}>
+          </NavLink>
+
+          <NavLink
+            to="/leads"
+            className={({ isActive }) =>
+              `p-2.5 rounded-lg transition-colors ${
+                isActive ? "text-crm-primary bg-crm-hover/50" : "text-crm-muted hover:text-crm-text hover:bg-crm-hover"
+              }`
+            }
+            title="Pipeline Opportunités"
+          >
+            <Layers className="w-5 h-5" />
+          </NavLink>
+
+          <NavLink
+            to="/documents"
+            className={({ isActive }) =>
+              `p-2.5 rounded-lg transition-colors ${
+                isActive ? "text-crm-primary bg-crm-hover/50" : "text-crm-muted hover:text-crm-text hover:bg-crm-hover"
+              }`
+            }
+            title={t("nav.documents")}
+          >
             <ShieldCheck className="w-5 h-5" />
-          </button>
+          </NavLink>
         </nav>
       </aside>
 
@@ -52,9 +90,14 @@ const OperationalShell: React.FC = () => {
           </div>
         </header>
 
-        {/* Workspace Body: 3-Pane WhatsApp Inbox Operational Workspace */}
+        {/* Workspace Body Routes */}
         <div className="flex-1 flex overflow-hidden">
-          <InboxWorkspace />
+          <Routes>
+            <Route path="/" element={<InboxWorkspace />} />
+            <Route path="/customers" element={<CustomerListPage />} />
+            <Route path="/leads" element={<LeadListPage />} />
+            <Route path="/documents" element={<DocumentListPage />} />
+          </Routes>
         </div>
       </main>
     </div>
