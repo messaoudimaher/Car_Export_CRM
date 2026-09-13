@@ -18,23 +18,37 @@ export const AiSuggestionCard: React.FC<AiSuggestionCardProps> = ({
   const confidencePercent = Math.round(suggestion.confidenceScore * 100);
   const isApproved = suggestion.status === "APPROVED";
   const isRejected = suggestion.status === "REJECTED";
+  const isExpired = suggestion.status === "EXPIRED";
+  const isQuarantined = suggestion.status === "QUARANTINED";
+  const isInvalid = suggestion.status === "INVALID" || suggestion.status === "PENDING_VALIDATION";
+  const isDisabled = isExpired || isQuarantined || isInvalid;
 
   if (isRejected) return null;
+
+  const getStatusBadgeText = () => {
+    if (isExpired) return "DÉSACTIVÉ — Suggestion Expirée";
+    if (isQuarantined) return "DÉSACTIVÉ — Quarantaine Sécurité";
+    if (isInvalid) return "DÉSACTIVÉ — Validation Requise";
+    if (isApproved) return "Réponse IA Envoyée avec Succès";
+    return "Suggestion de Réponse IA — Non Envoyée";
+  };
 
   return (
     <div
       className={`rounded-lg p-3.5 my-2 border text-xs shadow-md transition-all ${
         isApproved
           ? "bg-slate-900/90 border-emerald-800/80 text-slate-200"
+          : isDisabled
+          ? "bg-red-950/90 border-red-800/80 text-red-200"
           : "bg-amber-950/90 border-amber-700/80 text-amber-100"
       }`}
     >
       {/* Card Header */}
       <div className="flex items-center justify-between pb-2 border-b border-amber-800/60 mb-2">
         <div className="flex items-center gap-2">
-          <Bot className={`w-4 h-4 ${isApproved ? "text-emerald-400" : "text-amber-400 animate-pulse"}`} />
+          <Bot className={`w-4 h-4 ${isApproved ? "text-emerald-400" : isDisabled ? "text-red-400" : "text-amber-400 animate-pulse"}`} />
           <span className="font-semibold uppercase tracking-wider text-[11px]">
-            {isApproved ? "Réponse IA Envoyée avec Succès" : "Suggestion de Réponse IA — Non Envoyée"}
+            {getStatusBadgeText()}
           </span>
         </div>
 
@@ -61,7 +75,11 @@ export const AiSuggestionCard: React.FC<AiSuggestionCardProps> = ({
       {!isApproved && (
         <div className="flex items-center justify-between pt-2 border-t border-amber-800/60">
           <div className="flex items-center gap-1 text-[10px] text-amber-300 italic">
-            <span>Aucun envoi automatique vers le client (Loi Non-Authoritative INV-003)</span>
+            <span>
+              {isDisabled
+                ? "Validation backend requise — Action bloquée"
+                : "Aucun envoi automatique vers le client (Loi Non-Authoritative INV-003)"}
+            </span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -79,8 +97,9 @@ export const AiSuggestionCard: React.FC<AiSuggestionCardProps> = ({
             {onInsertIntoEditor && (
               <button
                 type="button"
+                disabled={isDisabled}
                 onClick={() => onInsertIntoEditor(suggestion.suggestedText)}
-                className="px-2.5 py-1 text-[11px] bg-amber-900/80 hover:bg-amber-800 text-amber-200 rounded border border-amber-700/80 transition-colors flex items-center gap-1"
+                className="px-2.5 py-1 text-[11px] bg-amber-900/80 hover:bg-amber-800 disabled:opacity-50 disabled:cursor-not-allowed text-amber-200 rounded border border-amber-700/80 transition-colors flex items-center gap-1"
               >
                 <Edit3 className="w-3.5 h-3.5" />
                 Insérer dans l'Éditeur
@@ -90,8 +109,9 @@ export const AiSuggestionCard: React.FC<AiSuggestionCardProps> = ({
             {onApproveAndSend && (
               <button
                 type="button"
+                disabled={isDisabled}
                 onClick={() => onApproveAndSend(suggestion)}
-                className="px-3 py-1 text-[11px] bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded transition-colors flex items-center gap-1.5 shadow-sm"
+                className="px-3 py-1 text-[11px] bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded transition-colors flex items-center gap-1.5 shadow-sm"
               >
                 <Send className="w-3.5 h-3.5" />
                 Approuver & Envoyer WhatsApp

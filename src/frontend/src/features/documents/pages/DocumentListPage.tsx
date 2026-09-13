@@ -47,6 +47,17 @@ const MOCK_DOCUMENTS: DocumentRecord[] = [
     uploadedBy: "Karim Mansour",
     createdAt: "2026-09-13T16:50:00Z",
   },
+  {
+    id: "doc_004",
+    filename: "Facture_Douanier_Suspecte.exe.pdf",
+    category: "CUSTOMS_FORM",
+    mimeType: "application/pdf",
+    sizeBytes: 4200000,
+    sha256Checksum: "7a123b456c789d012e345f6789a01b234c567d890e123f456a789b012c345d67",
+    scanStatus: "QUARANTINED",
+    uploadedBy: "Unknown Transporter",
+    createdAt: "2026-09-13T17:30:00Z",
+  },
 ];
 
 export const DocumentListPage: React.FC = () => {
@@ -68,21 +79,21 @@ export const DocumentListPage: React.FC = () => {
         return (
           <span className="px-2 py-0.5 text-[10px] font-mono bg-emerald-950 text-emerald-400 border border-emerald-800 rounded-full flex items-center gap-1 w-max">
             <CheckCircle className="w-3 h-3" />
-            PASSED (SHA-256 Valid)
+            Antivirus S3: CLEAN
           </span>
         );
       case "PENDING_SCAN":
         return (
           <span className="px-2 py-0.5 text-[10px] font-mono bg-amber-950 text-amber-400 border border-amber-800 rounded-full flex items-center gap-1 w-max">
             <Clock className="w-3 h-3 animate-spin" />
-            PENDING SCAN
+            Antivirus S3: EN COURS
           </span>
         );
       case "QUARANTINED":
         return (
           <span className="px-2 py-0.5 text-[10px] font-mono bg-red-950 text-red-400 border border-red-800 rounded-full flex items-center gap-1 w-max">
             <AlertTriangle className="w-3 h-3" />
-            QUARANTINED
+            Antivirus S3: INFECTED (QUARANTAINE)
           </span>
         );
       default:
@@ -191,8 +202,14 @@ export const DocumentListPage: React.FC = () => {
                         <Download className="w-3 h-3" />
                         Télécharger (Pre-signed)
                       </button>
+                    ) : d.scanStatus === "QUARANTINED" ? (
+                      <span className="text-[10px] text-red-400 font-mono bg-red-950/60 px-2 py-0.5 rounded border border-red-800/80 inline-block">
+                        Accès Bloqué (Quarantaine Sécurité)
+                      </span>
                     ) : (
-                      <span className="text-[10px] text-slate-500 font-mono italic">Accès Bloqué (Scan)</span>
+                      <span className="text-[10px] text-amber-400 font-mono bg-amber-950/60 px-2 py-0.5 rounded border border-amber-800/80 inline-block">
+                        Analyse Antivirus S3 en cours...
+                      </span>
                     )}
                   </td>
                 </tr>

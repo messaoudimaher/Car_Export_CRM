@@ -25,7 +25,7 @@ export interface AiSuggestion {
   suggestedText: string;
   reasoningSnippet?: string;
   confidenceScore: number;
-  status: "PROVISIONAL" | "APPROVED" | "REJECTED";
+  status: "PROVISIONAL" | "APPROVED" | "REJECTED" | "EXPIRED" | "QUARANTINED" | "INVALID" | "PENDING_VALIDATION";
   createdAt: string;
 }
 

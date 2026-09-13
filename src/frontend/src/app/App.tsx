@@ -6,10 +6,15 @@ import { ToastContainer } from "../shared/components/feedback/ToastContainer";
 import { LanguageSelector } from "../shared/components/ui/LanguageSelector";
 import { QueryProvider } from "./providers/QueryProvider";
 import { InboxWorkspace } from "../features/inbox/components/InboxWorkspace";
-import { CustomerListPage } from "../features/customers/pages/CustomerListPage";
-import { LeadListPage } from "../features/leads/pages/LeadListPage";
-import { DocumentListPage } from "../features/documents/pages/DocumentListPage";
-import "../shared/i18n";
+const CustomerListPage = React.lazy(() =>
+  import("../features/customers/pages/CustomerListPage").then((m) => ({ default: m.CustomerListPage }))
+);
+const LeadListPage = React.lazy(() =>
+  import("../features/leads/pages/LeadListPage").then((m) => ({ default: m.LeadListPage }))
+);
+const DocumentListPage = React.lazy(() =>
+  import("../features/documents/pages/DocumentListPage").then((m) => ({ default: m.DocumentListPage }))
+);
 
 const OperationalShell: React.FC = () => {
   const { t } = useTranslation();
@@ -92,12 +97,20 @@ const OperationalShell: React.FC = () => {
 
         {/* Workspace Body Routes */}
         <div className="flex-1 flex overflow-hidden">
-          <Routes>
-            <Route path="/" element={<InboxWorkspace />} />
-            <Route path="/customers" element={<CustomerListPage />} />
-            <Route path="/leads" element={<LeadListPage />} />
-            <Route path="/documents" element={<DocumentListPage />} />
-          </Routes>
+          <React.Suspense
+            fallback={
+              <div className="flex-1 flex items-center justify-center text-xs text-slate-400 font-mono animate-pulse">
+                Chargement du module...
+              </div>
+            }
+          >
+            <Routes>
+              <Route path="/" element={<InboxWorkspace />} />
+              <Route path="/customers" element={<CustomerListPage />} />
+              <Route path="/leads" element={<LeadListPage />} />
+              <Route path="/documents" element={<DocumentListPage />} />
+            </Routes>
+          </React.Suspense>
         </div>
       </main>
     </div>

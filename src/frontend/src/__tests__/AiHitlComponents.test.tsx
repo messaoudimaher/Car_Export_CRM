@@ -78,4 +78,49 @@ describe("AI HITL Visual Hierarchy Components (INV-003, ADR 0012)", () => {
     fireEvent.click(approveBtn);
     expect(onApprove).toHaveBeenCalledWith(mockSuggestion);
   });
+
+  it("triggers onReject when clicking Ignorer on AiSuggestionCard", () => {
+    const onReject = vi.fn();
+
+    render(
+      <AiSuggestionCard
+        suggestion={mockSuggestion}
+        onReject={onReject}
+      />
+    );
+
+    const rejectBtn = screen.getByText("Ignorer");
+    fireEvent.click(rejectBtn);
+    expect(onReject).toHaveBeenCalledWith("sug_1");
+  });
+
+  it("disables approve and insert actions when AI suggestion is EXPIRED or QUARANTINED", () => {
+    const expiredSuggestion: AiSuggestion = {
+      ...mockSuggestion,
+      id: "sug_expired",
+      status: "EXPIRED",
+    };
+
+    const onApprove = vi.fn();
+    const onInsert = vi.fn();
+
+    render(
+      <AiSuggestionCard
+        suggestion={expiredSuggestion}
+        onApproveAndSend={onApprove}
+        onInsertIntoEditor={onInsert}
+      />
+    );
+
+    expect(screen.getByText("DÉSACTIVÉ — Suggestion Expirée")).toBeDefined();
+    
+    const approveBtn = screen.getByText("Approuver & Envoyer WhatsApp") as HTMLButtonElement;
+    const insertBtn = screen.getByText("Insérer dans l'Éditeur") as HTMLButtonElement;
+
+    expect(approveBtn.disabled).toBe(true);
+    expect(insertBtn.disabled).toBe(true);
+
+    fireEvent.click(approveBtn);
+    expect(onApprove).not.toHaveBeenCalled();
+  });
 });

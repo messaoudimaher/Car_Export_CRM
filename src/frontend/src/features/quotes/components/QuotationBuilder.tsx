@@ -63,7 +63,9 @@ export const QuotationBuilder: React.FC<QuotationBuilderProps> = ({
             <Calculator className="w-5 h-5 text-blue-400" />
             <div>
               <h2 className="text-sm font-bold text-slate-100">Générateur de Devis FCR</h2>
-              <p className="text-[11px] text-slate-400 font-mono">Client: {customerName} ({customerPhone})</p>
+              <p className="text-[10px] text-slate-400 font-mono">
+                Client: {customerName} ({customerPhone}) • <span className="text-amber-400 font-sans">Aperçu Client (Backend Authoritative)</span>
+              </p>
             </div>
           </div>
           <button

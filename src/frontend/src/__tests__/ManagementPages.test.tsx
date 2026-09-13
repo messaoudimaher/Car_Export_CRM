@@ -26,11 +26,16 @@ describe("Customer, Lead & Document Management Views (TASK-1705)", () => {
     expect(screen.getByText("QUALIFIED")).toBeDefined();
   });
 
-  it("renders DocumentListPage repository with SHA-256 scan status pills", () => {
+  it("renders DocumentListPage repository with S3 scan status pills and blocks quarantined document access", () => {
     render(<DocumentListPage />);
 
     expect(screen.getByText("Dépôt Privé S3 & Documents RGPD")).toBeDefined();
     expect(screen.getByText("Carte_Grise_BMW_X5_WBA123.pdf")).toBeDefined();
-    expect(screen.getAllByText("PASSED (SHA-256 Valid)").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Antivirus S3: CLEAN").length).toBeGreaterThan(0);
+
+    // Verify Quarantined document displays access block badge and no download button
+    expect(screen.getByText("Facture_Douanier_Suspecte.exe.pdf")).toBeDefined();
+    expect(screen.getByText("Antivirus S3: INFECTED (QUARANTAINE)")).toBeDefined();
+    expect(screen.getByText("Accès Bloqué (Quarantaine Sécurité)")).toBeDefined();
   });
 });

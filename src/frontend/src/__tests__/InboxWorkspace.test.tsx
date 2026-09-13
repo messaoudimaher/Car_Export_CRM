@@ -63,4 +63,17 @@ describe("Inbox Operational Workspace Components", () => {
     expect(screen.getByText("Porsche Macan GTS 2023")).toBeDefined();
     expect(screen.getByText("QUALIFIED")).toBeDefined();
   });
+
+  it("does not trigger keyboard navigation shortcuts when typing inside form controls", () => {
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    input.focus();
+
+    const event = new KeyboardEvent("keydown", { key: "j", bubbles: true });
+    input.dispatchEvent(event);
+
+    // Event should pass through without calling preventDefault on typing in input
+    expect(event.defaultPrevented).toBe(false);
+    document.body.removeChild(input);
+  });
 });

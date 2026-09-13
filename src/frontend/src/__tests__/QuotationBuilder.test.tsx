@@ -18,7 +18,7 @@ describe("FCR Quotation Builder UI & PDF Preview (BR-005, BR-006)", () => {
     );
 
     expect(screen.getByText("Générateur de Devis FCR")).toBeDefined();
-    expect(screen.getByText("Client: Mohamed Ben Ali (+21698123456)")).toBeDefined();
+    expect(screen.getByText(/Mohamed Ben Ali/)).toBeDefined();
 
     // 45,000 € vehicle + 1,200 € transport + 800 € service = 47,000 €
     expect(screen.getByText(/47.*000/)).toBeDefined();
@@ -42,6 +42,22 @@ describe("FCR Quotation Builder UI & PDF Preview (BR-005, BR-006)", () => {
     expect(screen.getByText("Attacher & Envoyer sur WhatsApp")).toBeDefined();
   });
 
+  it("does NOT display BR-015 Manager Approval Warning when discount is exactly 5%", () => {
+    render(
+      <QuotationBuilder
+        customerName="Mohamed Ben Ali"
+        customerPhone="+21698123456"
+        isOpen={true}
+        onClose={vi.fn()}
+      />
+    );
+
+    const discountInput = screen.getByLabelText(/Remise/i);
+    fireEvent.change(discountInput, { target: { value: "5" } });
+
+    expect(screen.queryByText(/BR-015/i)).toBeNull();
+  });
+
   it("displays BR-015 Manager Approval Warning when discount exceeds 5%", () => {
     render(
       <QuotationBuilder
@@ -53,7 +69,7 @@ describe("FCR Quotation Builder UI & PDF Preview (BR-005, BR-006)", () => {
     );
 
     const discountInput = screen.getByLabelText(/Remise/i);
-    fireEvent.change(discountInput, { target: { value: "10" } });
+    fireEvent.change(discountInput, { target: { value: "6" } });
 
     expect(screen.getByText(/BR-015/i)).toBeDefined();
     expect(screen.getByText(/validation d'un Manager/i)).toBeDefined();
