@@ -1,6 +1,7 @@
 """Document Service orchestrating PDF generation, private storage & RBAC (WS-10, TASK-1003)."""
 
 import uuid
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -302,7 +303,7 @@ class DocumentService:
         self,
         tenant_id: uuid.UUID,
         document_id: uuid.UUID,
-        requesting_user: User,
+        requesting_user: Any,
         expiration_seconds: int = 900,
     ) -> tuple[Document, str]:
         """Authorize user access and generate a presigned temporary download URL."""
@@ -325,15 +326,61 @@ class DocumentService:
             expiration_seconds=expiration_seconds,
         )
 
+        user_id_val = getattr(requesting_user, "user_id", None) or getattr(
+            requesting_user, "id", None
+        )
         logger.info(
             "DOCUMENT_ACCESS_GRANTED: Presigned URL generated",
             extra={
                 "tenant_id": str(tenant_id),
                 "document_id": str(document_id),
-                "user_id": str(requesting_user.id),
+                "user_id": str(user_id_val),
             },
         )
         return doc, url
+
+    async def get_document_by_id(
+        self,
+        tenant_id: uuid.UUID,
+        document_id: uuid.UUID,
+    ) -> Document:
+        """Retrieve single document metadata record under tenant context (SEC-007)."""
+        stmt = select(Document).where(Document.id == document_id, Document.tenant_id == tenant_id)
+        result = await self.session.execute(stmt)
+        doc = result.scalar_one_or_none()
+        if doc is None:
+            raise NotFoundException(f"Document '{document_id}' not found")
+        return doc
+
+    async def list_documents(
+        self,
+        tenant_id: uuid.UUID,
+        lead_id: uuid.UUID | None = None,
+        customer_id: uuid.UUID | None = None,
+        category: str | None = None,
+        status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[Document]:
+        """List tenant document metadata records with optional filters (SEC-007)."""
+        stmt = (
+            select(Document)
+            .where(Document.tenant_id == tenant_id)
+            .order_by(Document.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        if lead_id:
+            stmt = stmt.where(Document.lead_id == lead_id)
+        if customer_id:
+            stmt = stmt.where(Document.customer_id == customer_id)
+        if category:
+            stmt = stmt.where(Document.category == category)
+        if status:
+            stmt = stmt.where(Document.status == status)
+
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
 
     async def delete_document(
         self,
