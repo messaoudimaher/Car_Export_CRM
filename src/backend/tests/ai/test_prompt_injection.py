@@ -172,7 +172,7 @@ async def test_ai_suggestion_defense_evaluation(payload: str) -> None:
 
     async for db in get_db_session():
         tenant = Tenant(name="Test Security Tenant", slug=f"t-{uuid.uuid4().hex[:8]}")
-        customer = Customer(tenant_id=tenant.id, phone="+21698000111", full_name="Adversarial User")
+        customer = Customer(tenant_id=tenant.id, phone_e164="+21698000111", full_name="Adversarial User")
         conv = WhatsAppConversation(tenant_id=tenant.id, customer_id=customer.id)
         db.add_all([tenant, customer, conv])
         await db.flush()
