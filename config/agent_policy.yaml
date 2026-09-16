@@ -1,0 +1,9 @@
+agent:
+  provider: gemini
+  model: gemini-3.6-flash
+  mode: draft_then_send
+  require_customer_confirmation: true
+  allow_price_commitments: false
+  allow_availability_commitments: false
+  allow_unconfirmed_order_creation: false
+  human_handoff_enabled: true

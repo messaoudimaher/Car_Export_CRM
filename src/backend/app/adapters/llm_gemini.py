@@ -23,7 +23,7 @@ class GeminiAdapter(LLMProvider, EmbeddingProvider):
         self,
         api_key: str | None = None,
         base_url: str = "https://generativelanguage.googleapis.com/v1beta",
-        max_retries: int = 3,
+        max_retries: int = 5,
     ) -> None:
         self.api_key = api_key or settings.GEMINI_API_KEY
         self.base_url = base_url.rstrip("/")
@@ -61,20 +61,24 @@ class GeminiAdapter(LLMProvider, EmbeddingProvider):
 
                     # Transient status codes (429 Rate Limit, 500, 502, 503, 504)
                     if response.status_code in (429, 500, 502, 503, 504):
+                        if attempt < self.max_retries:
+                            backoff = 12.0 * attempt if response.status_code == 429 else (0.5 * (2 ** (attempt - 1)))
+                            await asyncio.sleep(backoff)
+                            continue
                         response.raise_for_status()
 
                     response.raise_for_status()
             except (httpx.TimeoutException, httpx.NetworkError) as exc:
                 last_exception = exc
                 if attempt < self.max_retries:
-                    backoff = 0.5 * (2 ** (attempt - 1))
+                    backoff = 1.0 * attempt
                     await asyncio.sleep(backoff)
                     continue
             except httpx.HTTPStatusError as exc:
                 last_exception = exc
                 status = exc.response.status_code
                 if status in (429, 500, 502, 503, 504) and attempt < self.max_retries:
-                    backoff = 0.5 * (2 ** (attempt - 1))
+                    backoff = 12.0 * attempt if status == 429 else (0.5 * (2 ** (attempt - 1)))
                     await asyncio.sleep(backoff)
                     continue
                 if status in (401, 403):
