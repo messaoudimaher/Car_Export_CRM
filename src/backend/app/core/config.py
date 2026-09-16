@@ -63,15 +63,15 @@ class Settings(BaseSettings):
     )
 
     # AI / LLM Configuration
-    LLM_PROVIDER: str = Field(default="openai", description="Default LLM Provider Vendor")
+    LLM_PROVIDER: str = Field(default="openai", description="Default LLM Provider Vendor (openai, gemini, demo)")
     LLM_DEFAULT_MODEL: str = Field(
         default="gpt-4o-mini",
-        validation_alias=AliasChoices("LLM_DEFAULT_MODEL", "OPENAI_MODEL"),
+        validation_alias=AliasChoices("LLM_DEFAULT_MODEL", "OPENAI_MODEL", "GEMINI_MODEL"),
         description="Default LLM model name",
     )
     LLM_PROVIDER_API_KEY: str = Field(
         default="dev_llm_key_placeholder",
-        validation_alias=AliasChoices("LLM_PROVIDER_API_KEY", "OPENAI_API_KEY"),
+        validation_alias=AliasChoices("LLM_PROVIDER_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY"),
         description="LLM Vendor Provider API Key",
     )
     EMBEDDING_PROVIDER_API_KEY: str = Field(
@@ -86,6 +86,18 @@ class Settings(BaseSettings):
     @property
     def OPENAI_API_KEY(self) -> str:
         """Alias for LLM_PROVIDER_API_KEY for OpenAI adapter compatibility."""
+        return self.LLM_PROVIDER_API_KEY
+
+    @property
+    def GEMINI_MODEL(self) -> str:
+        """Alias for LLM_DEFAULT_MODEL for Gemini adapter compatibility."""
+        if self.LLM_DEFAULT_MODEL.startswith("gpt-"):
+            return "gemini-1.5-flash"
+        return self.LLM_DEFAULT_MODEL
+
+    @property
+    def GEMINI_API_KEY(self) -> str:
+        """Alias for LLM_PROVIDER_API_KEY for Gemini adapter compatibility."""
         return self.LLM_PROVIDER_API_KEY
 
     # Object Storage Configuration (S3)

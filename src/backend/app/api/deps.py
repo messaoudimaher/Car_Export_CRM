@@ -169,15 +169,37 @@ def get_whatsapp_provider() -> "WhatsAppProvider":
     return MetaWhatsAppProvider(app_secret=settings.META_WEBHOOK_APP_SECRET)
 
 
-def get_embedding_provider() -> "EmbeddingProvider":
-    """Dependency returning configured EmbeddingProvider implementation based on environment."""
+def get_llm_provider() -> "LLMProvider":
+    """Dependency returning configured LLMProvider implementation based on settings."""
     from app.adapters.llm_demo import DemoLLMAdapter
+    from app.adapters.llm_gemini import GeminiAdapter
     from app.adapters.llm_openai import OpenAIAdapter
     from app.core.config import settings
 
-    if settings.ENVIRONMENT in (
-        "development",
-        "test",
-    ) or settings.OPENAI_API_KEY.startswith("dev_"):
-        return DemoLLMAdapter()
-    return OpenAIAdapter(api_key=settings.OPENAI_API_KEY)
+    if settings.LLM_PROVIDER.lower() == "gemini":
+        if settings.GEMINI_API_KEY.startswith("dev_"):
+            return DemoLLMAdapter()
+        return GeminiAdapter(api_key=settings.GEMINI_API_KEY)
+    elif settings.LLM_PROVIDER.lower() == "openai":
+        if settings.OPENAI_API_KEY.startswith("dev_"):
+            return DemoLLMAdapter()
+        return OpenAIAdapter(api_key=settings.OPENAI_API_KEY)
+    return DemoLLMAdapter()
+
+
+def get_embedding_provider() -> "EmbeddingProvider":
+    """Dependency returning configured EmbeddingProvider implementation based on environment."""
+    from app.adapters.llm_demo import DemoLLMAdapter
+    from app.adapters.llm_gemini import GeminiAdapter
+    from app.adapters.llm_openai import OpenAIAdapter
+    from app.core.config import settings
+
+    if settings.LLM_PROVIDER.lower() == "gemini":
+        if settings.GEMINI_API_KEY.startswith("dev_"):
+            return DemoLLMAdapter()
+        return GeminiAdapter(api_key=settings.GEMINI_API_KEY)
+    elif settings.LLM_PROVIDER.lower() == "openai":
+        if settings.OPENAI_API_KEY.startswith("dev_"):
+            return DemoLLMAdapter()
+        return OpenAIAdapter(api_key=settings.OPENAI_API_KEY)
+    return DemoLLMAdapter()
