@@ -33,6 +33,30 @@ export const apiClient: AxiosInstance = axios.create({
 });
 
 let isLoggingOut = false;
+let devTokenPromise: Promise<string | null> | null = null;
+
+export async function ensureDevToken(): Promise<string | null> {
+  const existing = localStorage.getItem("crm_access_token") || sessionStorage.getItem("crm_access_token");
+  if (existing) return existing;
+
+  if (!devTokenPromise) {
+    devTokenPromise = axios
+      .post("/api/v1/auth/dev-token")
+      .then((res) => {
+        const token = res.data?.data?.access_token || res.data?.access_token;
+        if (token) {
+          localStorage.setItem("crm_access_token", token);
+          return token;
+        }
+        return null;
+      })
+      .catch(() => null)
+      .finally(() => {
+        devTokenPromise = null;
+      });
+  }
+  return devTokenPromise;
+}
 
 export function clearAuthSession(): void {
   localStorage.removeItem("crm_access_token");
@@ -42,8 +66,11 @@ export function clearAuthSession(): void {
 
 // Request Interceptor: Attach JWT Bearer token & correlation ID (SEC-001, ADR 0008)
 apiClient.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
-    const token = localStorage.getItem("crm_access_token") || sessionStorage.getItem("crm_access_token");
+  async (config: InternalAxiosRequestConfig) => {
+    let token = localStorage.getItem("crm_access_token") || sessionStorage.getItem("crm_access_token");
+    if (!token && !config.url?.includes("/auth/")) {
+      token = await ensureDevToken();
+    }
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -89,14 +116,14 @@ apiClient.interceptors.response.use(
 
     const apiError = new ApiError(problem, status);
 
-    const isAuthEndpoint = requestUrl.includes("/auth/login") || requestUrl.includes("/auth/token");
+    const isAuthEndpoint = requestUrl.includes("/auth/login") || requestUrl.includes("/auth/token") || requestUrl.includes("/auth/dev-token");
 
     // 401 Unauthorized handling
     if (status === 401 && !isAuthEndpoint) {
       if (!isLoggingOut) {
         isLoggingOut = true;
         clearAuthSession();
-        toast.error("Session Inactive", "Requête non authentifiée - Mode démonstration actif.");
+        toast.error("Session Inactive", "Requête non authentifiée - Reconnexion en cours.");
         setTimeout(() => { isLoggingOut = false; }, 3000);
       }
     } else {
@@ -107,4 +134,3 @@ apiClient.interceptors.response.use(
     return Promise.reject(apiError);
   }
 );
-
