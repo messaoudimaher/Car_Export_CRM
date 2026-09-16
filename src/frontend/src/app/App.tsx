@@ -58,7 +58,7 @@ const OperationalShell: React.FC = () => {
                 isActive ? "text-crm-primary bg-crm-hover/50" : "text-crm-muted hover:text-crm-text hover:bg-crm-hover"
               }`
             }
-            title="Pipeline Opportunités"
+            title={t("nav.leads")}
           >
             <Layers className="w-5 h-5" />
           </NavLink>

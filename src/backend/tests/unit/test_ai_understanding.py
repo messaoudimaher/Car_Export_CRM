@@ -94,7 +94,7 @@ async def test_create_provisional_understanding_db_success() -> None:
 
     async for db in get_db_session():
         tenant = Tenant(name="Test AI Tenant", slug=f"t-{uuid.uuid4().hex[:8]}")
-        customer = Customer(tenant_id=tenant.id, phone="+21698765432", full_name="Sami Ben Ali")
+        customer = Customer(tenant_id=tenant.id, phone_e164="+21698765432", full_name="Sami Ben Ali")
         db.add_all([tenant, customer])
         await db.flush()
 

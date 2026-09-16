@@ -122,7 +122,7 @@ async def test_followup_service_db_persistence() -> None:
             tenant_id=tenant.id,
             first_name="Tarak",
             last_name="Mansour",
-            phone_number=f"+21697{uuid.uuid4().int % 1000000:06d}",
+            phone_e164=f"+21697{uuid.uuid4().int % 1000000:06d}",
         )
         session.add(customer)
         await session.flush()

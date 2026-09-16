@@ -24,7 +24,7 @@ async def test_create_quotation_auto_approved_success() -> None:
 
     async for db_session in get_db_session():
         tenant = Tenant(name="Test Dealer Tenant", slug=f"t-{uuid.uuid4().hex[:8]}")
-        customer = Customer(tenant_id=tenant.id, phone="+21698111222", full_name="Ali Karoui")
+        customer = Customer(tenant_id=tenant.id, phone_e164="+21698111222", full_name="Ali Karoui")
         lead = Lead(tenant_id=tenant.id, customer_id=customer.id, status=LeadStatus.QUALIFIED.value)
         vehicle = Vehicle(
             tenant_id=tenant.id,
@@ -100,7 +100,7 @@ async def test_create_quotation_high_discount_pending_approval_and_admin_approva
 
     async for db_session in get_db_session():
         tenant = Tenant(name="Approval Test Tenant", slug=f"t-{uuid.uuid4().hex[:8]}")
-        customer = Customer(tenant_id=tenant.id, phone="+21698333444", full_name="Sami Mansour")
+        customer = Customer(tenant_id=tenant.id, phone_e164="+21698333444", full_name="Sami Mansour")
         lead = Lead(tenant_id=tenant.id, customer_id=customer.id, status=LeadStatus.QUALIFIED.value)
         admin_user = User(
             tenant_id=tenant.id,
@@ -163,7 +163,7 @@ async def test_reject_quotation_by_admin() -> None:
 
     async for db_session in get_db_session():
         tenant = Tenant(name="Reject Test Tenant", slug=f"t-{uuid.uuid4().hex[:8]}")
-        customer = Customer(tenant_id=tenant.id, phone="+21698555666", full_name="Kamel Gharbi")
+        customer = Customer(tenant_id=tenant.id, phone_e164="+21698555666", full_name="Kamel Gharbi")
         lead = Lead(tenant_id=tenant.id, customer_id=customer.id, status=LeadStatus.QUALIFIED.value)
         admin_user = User(
             tenant_id=tenant.id,

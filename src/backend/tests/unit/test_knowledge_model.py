@@ -149,8 +149,8 @@ async def test_knowledge_embedding_db_persistence() -> None:
 
     async for session in get_db_session():
         tenant = Tenant(
-            company_name=f"RAG Test Org {uuid.uuid4().hex[:6]}",
-            subdomain=f"rag-{uuid.uuid4().hex[:6]}",
+            name=f"RAG Test Org {uuid.uuid4().hex[:6]}",
+            slug=f"rag-{uuid.uuid4().hex[:6]}",
         )
         session.add(tenant)
         await session.flush()

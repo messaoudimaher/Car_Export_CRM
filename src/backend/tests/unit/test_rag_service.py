@@ -83,12 +83,12 @@ async def test_rag_service_cross_tenant_vector_isolation_db() -> None:
     async for session in get_db_session():
         # Create Tenant A and Tenant B
         tenant_a = Tenant(
-            company_name=f"Tenant A {uuid.uuid4().hex[:6]}",
-            subdomain=f"tenant-a-{uuid.uuid4().hex[:6]}",
+            name=f"Tenant A {uuid.uuid4().hex[:6]}",
+            slug=f"tenant-a-{uuid.uuid4().hex[:6]}",
         )
         tenant_b = Tenant(
-            company_name=f"Tenant B {uuid.uuid4().hex[:6]}",
-            subdomain=f"tenant-b-{uuid.uuid4().hex[:6]}",
+            name=f"Tenant B {uuid.uuid4().hex[:6]}",
+            slug=f"tenant-b-{uuid.uuid4().hex[:6]}",
         )
         session.add_all([tenant_a, tenant_b])
         await session.flush()

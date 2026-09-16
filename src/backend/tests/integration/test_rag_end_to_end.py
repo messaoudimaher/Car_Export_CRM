@@ -46,7 +46,7 @@ async def test_end_to_end_rag_pipeline_with_tenant_isolation_and_hitl() -> None:
             tenant_id=tenant_a.id,
             first_name="Moncef",
             last_name="Ben Salem",
-            phone_number=f"+21698{uuid.uuid4().int % 1000000:06d}",
+            phone_e164=f"+21698{uuid.uuid4().int % 1000000:06d}",
         )
         session.add(customer_a)
         await session.flush()

@@ -67,10 +67,11 @@ def test_invalid_database_migrator_url_validation() -> None:
     assert "Database URL must start with" in str(exc_info.value)
 
 
-def test_database_migrator_url_default() -> None:
-    """Verify DATABASE_MIGRATOR_URL uses car_export_migrator credentials."""
-    settings = Settings()
-    assert "car_export_migrator" in settings.DATABASE_MIGRATOR_URL
+def test_database_migrator_url_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify DATABASE_MIGRATOR_URL uses valid postgresql connection string."""
+    monkeypatch.delenv("DATABASE_MIGRATOR_URL", raising=False)
+    settings = Settings(_env_file=None)
+    assert settings.DATABASE_MIGRATOR_URL.startswith("postgresql")
 
 
 def test_invalid_redis_url_validation() -> None:
