@@ -1,5 +1,5 @@
 import React from "react";
-import { BrowserRouter, Route, Routes, NavLink } from "react-router-dom";
+import { BrowserRouter, Route, Routes, NavLink, Navigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Car, MessageSquare, Users, ShieldCheck, CheckCircle2, Layers } from "lucide-react";
 import { ToastContainer } from "../shared/components/feedback/ToastContainer";
@@ -109,6 +109,7 @@ const OperationalShell: React.FC = () => {
               <Route path="/customers" element={<CustomerListPage />} />
               <Route path="/leads" element={<LeadListPage />} />
               <Route path="/documents" element={<DocumentListPage />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </React.Suspense>
         </div>

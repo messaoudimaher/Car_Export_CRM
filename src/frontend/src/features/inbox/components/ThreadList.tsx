@@ -100,7 +100,7 @@ export const ThreadList: React.FC<ThreadListProps> = ({
                 <div className="flex items-start justify-between mb-1">
                   <div className="flex items-center gap-1.5 min-w-0">
                     <span className="font-semibold text-xs text-slate-100 truncate">{t.customerName}</span>
-                    {t.customer.fcrEligible && (
+                    {t.customer?.fcrEligible && (
                       <span className="text-[9px] bg-emerald-950 text-emerald-400 border border-emerald-800/80 px-1 py-0.2 rounded font-mono">
                         FCR
                       </span>

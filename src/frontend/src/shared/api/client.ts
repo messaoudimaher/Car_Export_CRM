@@ -96,10 +96,7 @@ apiClient.interceptors.response.use(
       if (!isLoggingOut) {
         isLoggingOut = true;
         clearAuthSession();
-        if (!window.location.pathname.startsWith("/login")) {
-          toast.error("Session Expired", "Please log in again to continue.");
-          window.location.href = "/login";
-        }
+        toast.error("Session Inactive", "Requête non authentifiée - Mode démonstration actif.");
         setTimeout(() => { isLoggingOut = false; }, 3000);
       }
     } else {
