@@ -92,7 +92,7 @@ class Settings(BaseSettings):
     def GEMINI_MODEL(self) -> str:
         """Alias for LLM_DEFAULT_MODEL for Gemini adapter compatibility."""
         if self.LLM_DEFAULT_MODEL.startswith("gpt-"):
-            return "gemini-1.5-flash"
+            return "gemini-3.6-flash"
         return self.LLM_DEFAULT_MODEL
 
     @property
