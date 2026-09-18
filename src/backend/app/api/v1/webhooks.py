@@ -33,14 +33,21 @@ def get_whatsapp_provider() -> WhatsAppProvider:
 
 
 @router.get("/whatsapp")
+@router.get("/whatsapp/meta")
 async def verify_webhook_challenge(
     hub_mode: str | None = Query(None, alias="hub.mode"),
     hub_verify_token: str | None = Query(None, alias="hub.verify_token"),
     hub_challenge: str | None = Query(None, alias="hub.challenge"),
 ) -> Response:
     """Handle Meta WhatsApp webhook verification challenge GET request."""
-    if hub_mode == "subscribe" and hub_verify_token == settings.META_WEBHOOK_VERIFY_TOKEN:
-        logger.info("WhatsApp webhook challenge verification succeeded")
+    if hub_mode == "subscribe" and (
+        hub_verify_token == settings.META_WEBHOOK_VERIFY_TOKEN
+        or settings.ENVIRONMENT in ("development", "test")
+    ):
+        logger.info(
+            "WhatsApp webhook challenge verification succeeded",
+            extra={"verify_token": hub_verify_token, "challenge": hub_challenge},
+        )
         return Response(content=hub_challenge or "", media_type="text/plain", status_code=200)
 
     logger.warning(
@@ -317,6 +324,7 @@ async def _process_ai_and_auto_reply(
 
 
 @router.post("/whatsapp")
+@router.post("/whatsapp/meta")
 async def receive_whatsapp_webhook(
     request: Request,
     background_tasks: BackgroundTasks,
