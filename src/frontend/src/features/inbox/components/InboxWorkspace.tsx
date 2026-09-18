@@ -4,7 +4,7 @@ import { ChatHistory } from "./ChatHistory";
 import { CustomerSidebar } from "./CustomerSidebar";
 import { QuotationBuilder } from "../../quotes/components/QuotationBuilder";
 import { useThreads, useThreadMessages, useSendMessage } from "../api/inboxApi";
-import { InboxFilter } from "../types";
+import { InboxFilter, ConversationThread } from "../types";
 
 export const InboxWorkspace: React.FC = () => {
   const [filter, setFilter] = useState<InboxFilter>({ status: "ALL" });
@@ -23,7 +23,7 @@ export const InboxWorkspace: React.FC = () => {
     }
   }, [threads, activeThreadId]);
 
-  const activeThread = threads.find((t) => t.id === activeThreadId) || threads[0];
+  const activeThread = threads.find((t: ConversationThread) => t.id === activeThreadId) || threads[0];
 
   const { data: messages = [], isLoading: isLoadingMessages } = useThreadMessages(activeThread?.id);
   const sendMessageMutation = useSendMessage();
@@ -56,13 +56,13 @@ export const InboxWorkspace: React.FC = () => {
       if (e.key === "j" || e.key === "J") {
         e.preventDefault();
         if (threads.length === 0) return;
-        const currentIndex = threads.findIndex((t) => t.id === activeThreadId);
+        const currentIndex = threads.findIndex((t: ConversationThread) => t.id === activeThreadId);
         const nextIndex = currentIndex < threads.length - 1 ? currentIndex + 1 : 0;
         setActiveThreadId(threads[nextIndex].id);
       } else if (e.key === "k" || e.key === "K") {
         e.preventDefault();
         if (threads.length === 0) return;
-        const currentIndex = threads.findIndex((t) => t.id === activeThreadId);
+        const currentIndex = threads.findIndex((t: ConversationThread) => t.id === activeThreadId);
         const prevIndex = currentIndex > 0 ? currentIndex - 1 : threads.length - 1;
         setActiveThreadId(threads[prevIndex].id);
       } else if (e.key === "r" || e.key === "R") {

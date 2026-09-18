@@ -41,7 +41,15 @@ class GeminiAdapter(LLMProvider, EmbeddingProvider):
         headers = {"Content-Type": "application/json"}
 
         last_exception: Exception | None = None
+        current_endpoint = endpoint
+        fallback_models = [
+            "gemini-3.5-flash-lite",
+            "gemini-flash-lite-latest",
+            "gemini-3.1-flash-lite",
+        ]
+        
         for attempt in range(1, self.max_retries + 1):
+            url = f"{self.base_url}/{current_endpoint.lstrip('/')}?key={key}"
             try:
                 async with httpx.AsyncClient(timeout=timeout_seconds) as client:
                     response = await client.post(url, headers=headers, json=payload)
@@ -61,9 +69,12 @@ class GeminiAdapter(LLMProvider, EmbeddingProvider):
 
                     # Transient status codes (429 Rate Limit, 500, 502, 503, 504)
                     if response.status_code in (429, 500, 502, 503, 504):
+                        # Switch to next fallback model if available
+                        if "models/" in current_endpoint:
+                            next_model = fallback_models[(attempt - 1) % len(fallback_models)]
+                            current_endpoint = f"models/{next_model}:generateContent"
                         if attempt < self.max_retries:
-                            backoff = 12.0 * attempt if response.status_code == 429 else (0.5 * (2 ** (attempt - 1)))
-                            await asyncio.sleep(backoff)
+                            await asyncio.sleep(0.5)
                             continue
                         response.raise_for_status()
 
@@ -102,6 +113,42 @@ class GeminiAdapter(LLMProvider, EmbeddingProvider):
             return settings.GEMINI_MODEL
         return model
 
+    def _format_gemini_contents(
+        self,
+        messages: list[dict[str, Any]] | None,
+        fallback_prompt: str | None,
+    ) -> list[dict[str, Any]]:
+        """Format and coalesce multi-turn chat messages into valid Gemini REST API schema."""
+        if not messages:
+            text = fallback_prompt or ""
+            return [{"role": "user", "parts": [{"text": text}]}]
+
+        raw_turns: list[dict[str, Any]] = []
+        for msg in messages:
+            role = "user" if msg.get("role") in ("user", "system", "customer") else "model"
+            text_val = str(msg.get("content", "")).strip()
+            if not text_val:
+                continue
+            raw_turns.append({"role": role, "text": text_val})
+
+        if not raw_turns:
+            text = fallback_prompt or ""
+            return [{"role": "user", "parts": [{"text": text}]}]
+
+        # Coalesce consecutive messages with the same role to comply with Gemini API
+        coalesced: list[dict[str, Any]] = []
+        for turn in raw_turns:
+            if coalesced and coalesced[-1]["role"] == turn["role"]:
+                coalesced[-1]["parts"][0]["text"] += f"\n\n{turn['text']}"
+            else:
+                coalesced.append({"role": turn["role"], "parts": [{"text": turn["text"]}]})
+
+        # Gemini requires that multi-turn starts with 'user'
+        if coalesced and coalesced[0]["role"] != "user":
+            coalesced.insert(0, {"role": "user", "parts": [{"text": "Hello"}]})
+
+        return coalesced
+
     async def generate_text(
         self,
         request: LLMCompletionRequest,
@@ -110,13 +157,7 @@ class GeminiAdapter(LLMProvider, EmbeddingProvider):
         start_time = time.perf_counter()
         target_model = self._normalize_model_name(request.model)
 
-        contents: list[dict[str, Any]] = []
-        if request.messages:
-            for msg in request.messages:
-                role = "user" if msg.get("role") in ("user", "system") else "model"
-                contents.append({"role": role, "parts": [{"text": msg.get("content", "")}]})
-        else:
-            contents.append({"role": "user", "parts": [{"text": request.prompt}]})
+        contents = self._format_gemini_contents(request.messages, request.prompt)
 
         payload: dict[str, Any] = {
             "contents": contents,
@@ -181,13 +222,7 @@ class GeminiAdapter(LLMProvider, EmbeddingProvider):
             f"{json.dumps(schema.model_json_schema(), indent=2)}"
         )
 
-        contents: list[dict[str, Any]] = []
-        if request.messages:
-            for msg in request.messages:
-                role = "user" if msg.get("role") in ("user", "system") else "model"
-                contents.append({"role": role, "parts": [{"text": msg.get("content", "")}]})
-        else:
-            contents.append({"role": "user", "parts": [{"text": request.prompt}]})
+        contents = self._format_gemini_contents(request.messages, request.prompt)
 
         payload: dict[str, Any] = {
             "contents": contents,

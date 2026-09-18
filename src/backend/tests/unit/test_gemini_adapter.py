@@ -30,7 +30,8 @@ def test_normalize_model_name() -> None:
     adapter = GeminiAdapter(api_key="AIzaSyDummyKey")
     assert adapter._normalize_model_name("gemini-1.5-flash") == "gemini-1.5-flash"
     assert adapter._normalize_model_name("models/gemini-2.0-flash") == "gemini-2.0-flash"
-    assert adapter._normalize_model_name("gpt-4o-mini") == "gemini-1.5-flash"
+    from app.core.config import settings
+    assert adapter._normalize_model_name("gpt-4o-mini") == settings.GEMINI_MODEL
 
 
 @pytest.mark.asyncio

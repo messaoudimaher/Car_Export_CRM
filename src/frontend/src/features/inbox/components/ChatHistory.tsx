@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Send, CheckCheck, Check, Clock, ShieldCheck, PhoneCall, Paperclip, Sparkles, ShieldAlert } from "lucide-react";
 import { ChatMessage, ConversationThread, AiSuggestion } from "../types";
 import { AiUnderstandingCard } from "./AiUnderstandingCard";
@@ -40,12 +40,17 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!content.trim() || isSubmitting) return;
+    const trimmed = content.trim();
+    if (!trimmed || isSubmitting) return;
 
+    // Clear content BEFORE awaiting to prevent React batching/double-submission issues
+    setContent("");
     try {
       setIsSubmitting(true);
-      await onSendMessage(content.trim());
-      setContent("");
+      await onSendMessage(trimmed);
+    } catch {
+      // Restore content on failure so agent doesn't lose their message
+      setContent(trimmed);
     } finally {
       setIsSubmitting(false);
     }
@@ -58,10 +63,10 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
     }
   };
 
-  const handleInsertIntoEditor = (text: string) => {
+  const handleInsertIntoEditor = useCallback((text: string) => {
     setContent(text);
     replyInputRef?.current?.focus();
-  };
+  }, [replyInputRef]);
 
   const handleApproveAndSendSuggestion = async (suggestion: AiSuggestion) => {
     try {
@@ -77,7 +82,9 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
 
   const handleConfirmUnderstanding = (_id: string) => {
     if (activeUnderstanding) {
+      // Show confirmed state briefly, then auto-dismiss after 2.5s (Bug #4 fix)
       setActiveUnderstanding({ ...activeUnderstanding, status: "CONFIRMED" });
+      setTimeout(() => setActiveUnderstanding(undefined), 2500);
     }
   };
 
@@ -181,22 +188,22 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
           })
         )}
 
-        {/* Tier 2: Provisional AI Extraction Card (Indigo) */}
-        {activeUnderstanding && (
-          <AiUnderstandingCard
-            understanding={activeUnderstanding}
-            onConfirm={handleConfirmUnderstanding}
-            onReject={() => setActiveUnderstanding(undefined)}
-          />
-        )}
-
-        {/* Tier 3: Provisional AI Reply Suggestion Card (Amber) */}
+        {/* Tier 3: HITL AI Reply Suggestion Card */}
         {activeSuggestion && (
           <AiSuggestionCard
             suggestion={activeSuggestion}
             onApproveAndSend={handleApproveAndSendSuggestion}
             onInsertIntoEditor={handleInsertIntoEditor}
             onReject={() => setActiveSuggestion(undefined)}
+          />
+        )}
+
+        {/* Tier 2: Provisional AI Extraction Card (Indigo) */}
+        {activeUnderstanding && (
+          <AiUnderstandingCard
+            understanding={activeUnderstanding}
+            onConfirm={handleConfirmUnderstanding}
+            onReject={() => setActiveUnderstanding(undefined)}
           />
         )}
 

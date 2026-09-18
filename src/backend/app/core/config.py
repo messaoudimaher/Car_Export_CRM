@@ -53,6 +53,7 @@ class Settings(BaseSettings):
     )
 
     # External Provider Configuration Placeholders
+    WHATSAPP_PROVIDER: str = Field(default="demo", description="WhatsApp Provider type (meta, demo)")
     META_WEBHOOK_APP_SECRET: str = Field(
         default="dev_meta_app_secret_placeholder",
         description="Meta WhatsApp Webhook HMAC App Secret",
@@ -60,6 +61,18 @@ class Settings(BaseSettings):
     META_WEBHOOK_VERIFY_TOKEN: str = Field(
         default="dev_meta_verify_token_placeholder",
         description="Meta WhatsApp Webhook Verification Challenge Token",
+    )
+    META_WHATSAPP_PHONE_NUMBER_ID: str = Field(
+        default="",
+        description="Meta WhatsApp Cloud API Phone Number ID",
+    )
+    META_WHATSAPP_ACCESS_TOKEN: str = Field(
+        default="",
+        description="Meta WhatsApp Cloud API Access Token",
+    )
+    META_API_VERSION: str = Field(
+        default="v21.0",
+        description="Meta Graph API Version",
     )
 
     # AI / LLM Configuration

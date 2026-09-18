@@ -24,12 +24,16 @@ class MetaWhatsAppProvider(WhatsAppProvider):
     def __init__(
         self,
         app_secret: str | None = None,
-        api_version: str = "v19.0",
+        access_token: str | None = None,
+        phone_number_id: str | None = None,
+        api_version: str | None = None,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
-        """Initialize MetaWhatsAppProvider with app secret and HTTP client."""
+        """Initialize MetaWhatsAppProvider with app secret, token, and HTTP client."""
         self.app_secret = app_secret or settings.META_WEBHOOK_APP_SECRET
-        self.api_version = api_version
+        self.access_token = access_token or settings.META_WHATSAPP_ACCESS_TOKEN
+        self.phone_number_id = phone_number_id or settings.META_WHATSAPP_PHONE_NUMBER_ID
+        self.api_version = api_version or settings.META_API_VERSION
         self._http_client = http_client
 
     def verify_webhook_signature(
@@ -114,14 +118,20 @@ class MetaWhatsAppProvider(WhatsAppProvider):
         recipient_e164: str,
         text_body: str,
     ) -> OutboundWhatsAppMessageResult:
-        """Dispatch outbound text message via Meta Graph API v19.0 endpoint."""
+        """Dispatch outbound text message via Meta Graph API endpoint."""
         normalized_recipient = normalize_phone_number(recipient_e164, "TN")
-        url = f"https://graph.facebook.com/{self.api_version}/{phone_number_id}/messages"
+        wa_recipient = extract_whatsapp_id(normalized_recipient)
+        target_phone_id = (
+            phone_number_id
+            if (phone_number_id and phone_number_id != "default_phone_number_id")
+            else self.phone_number_id
+        )
+        url = f"https://graph.facebook.com/{self.api_version}/{target_phone_id}/messages"
 
         payload = {
             "messaging_product": "whatsapp",
             "recipient_type": "individual",
-            "to": normalized_recipient,
+            "to": wa_recipient,
             "type": "text",
             "text": {
                 "preview_url": False,
@@ -139,14 +149,20 @@ class MetaWhatsAppProvider(WhatsAppProvider):
         language_code: str = "fr",
         components: list[dict[str, Any]] | None = None,
     ) -> OutboundWhatsAppMessageResult:
-        """Dispatch outbound HSM template message via Meta Graph API v19.0 endpoint."""
+        """Dispatch outbound HSM template message via Meta Graph API endpoint."""
         normalized_recipient = normalize_phone_number(recipient_e164, "TN")
-        url = f"https://graph.facebook.com/{self.api_version}/{phone_number_id}/messages"
+        wa_recipient = extract_whatsapp_id(normalized_recipient)
+        target_phone_id = (
+            phone_number_id
+            if (phone_number_id and phone_number_id != "default_phone_number_id")
+            else self.phone_number_id
+        )
+        url = f"https://graph.facebook.com/{self.api_version}/{target_phone_id}/messages"
 
         payload = {
             "messaging_product": "whatsapp",
             "recipient_type": "individual",
-            "to": normalized_recipient,
+            "to": wa_recipient,
             "type": "template",
             "template": {
                 "name": template_name,
@@ -163,11 +179,15 @@ class MetaWhatsAppProvider(WhatsAppProvider):
         payload: dict[str, Any],
         recipient_e164: str,
     ) -> OutboundWhatsAppMessageResult:
-        """Execute HTTP POST request to Meta Cloud API endpoint."""
+        """Execute HTTP POST request to Meta Cloud API endpoint with Authorization Bearer header."""
         client = self._http_client or httpx.AsyncClient(timeout=10.0)
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": "application/json",
+        }
 
         try:
-            response = await client.post(url, json=payload)
+            response = await client.post(url, json=payload, headers=headers)
             if response.status_code not in (200, 201):
                 raise ServiceUnavailableException(
                     f"Meta WhatsApp API HTTP {response.status_code}: {response.text}"

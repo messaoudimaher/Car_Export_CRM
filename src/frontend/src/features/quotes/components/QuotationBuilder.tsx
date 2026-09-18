@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { X, FileText, Calculator, ShieldCheck, Eye, RefreshCw, AlertTriangle } from "lucide-react";
+import { X, FileText, Calculator, ShieldCheck, Eye, RefreshCw, AlertTriangle, Loader2 } from "lucide-react";
 import { QuotePdfPreviewModal } from "./QuotePdfPreviewModal";
 
 interface QuotationBuilderProps {
@@ -31,6 +31,7 @@ export const QuotationBuilder: React.FC<QuotationBuilderProps> = ({
   const [serviceFeeEur, setServiceFeeEur] = useState(800);
 
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   if (!isOpen) return null;
 
@@ -42,7 +43,12 @@ export const QuotationBuilder: React.FC<QuotationBuilderProps> = ({
   const estimatedTndAmount = Math.round(totalExportPriceEur * 3.35);
 
   const handleGeneratePdf = () => {
-    setIsPreviewOpen(true);
+    // Show generating state for 1.2s before opening preview (Bug #3 fix)
+    setIsGenerating(true);
+    setTimeout(() => {
+      setIsGenerating(false);
+      setIsPreviewOpen(true);
+    }, 1200);
   };
 
   const handleSendToChat = () => {
@@ -277,10 +283,20 @@ export const QuotationBuilder: React.FC<QuotationBuilderProps> = ({
           <button
             type="button"
             onClick={handleGeneratePdf}
-            className="px-4 py-2 text-xs bg-blue-600 hover:bg-blue-500 text-white font-medium rounded transition-colors flex items-center gap-1.5 shadow-sm"
+            disabled={isGenerating}
+            className="px-4 py-2 text-xs bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white font-medium rounded transition-colors flex items-center gap-1.5 shadow-sm"
           >
-            <Eye className="w-4 h-4" />
-            Générer & Aperçu PDF Pre-signed
+            {isGenerating ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Génération en cours...
+              </>
+            ) : (
+              <>
+                <Eye className="w-4 h-4" />
+                Générer &amp; Aperçu PDF Pre-signed
+              </>
+            )}
           </button>
         </div>
       </div>

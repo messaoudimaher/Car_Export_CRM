@@ -197,10 +197,10 @@ async def test_meta_whatsapp_provider_send_text_message_success() -> None:
 
     mock_http_client.post.assert_awaited_once()
     call_args = mock_http_client.post.call_args
-    assert "https://graph.facebook.com/v19.0/109876543210/messages" in call_args[0]
+    assert f"https://graph.facebook.com/{provider.api_version}/109876543210/messages" in call_args[0]
     payload = call_args[1]["json"]
     assert payload["messaging_product"] == "whatsapp"
-    assert payload["to"] == "+21698123456"
+    assert payload["to"] == "21698123456"
     assert payload["type"] == "text"
     assert payload["text"]["body"] == "Votre devis FCR a été généré."
 

@@ -161,12 +161,17 @@ def get_whatsapp_provider() -> "WhatsAppProvider":
     from app.adapters.whatsapp_meta import MetaWhatsAppProvider
     from app.core.config import settings
 
-    if settings.ENVIRONMENT in (
-        "development",
-        "test",
-    ) and settings.META_WEBHOOK_APP_SECRET.startswith("dev_"):
-        return DemoWhatsAppProvider()
-    return MetaWhatsAppProvider(app_secret=settings.META_WEBHOOK_APP_SECRET)
+    if settings.WHATSAPP_PROVIDER.lower() == "meta" or (
+        settings.META_WHATSAPP_ACCESS_TOKEN
+        and not settings.META_WHATSAPP_ACCESS_TOKEN.startswith("dev_")
+    ):
+        return MetaWhatsAppProvider(
+            app_secret=settings.META_WEBHOOK_APP_SECRET,
+            access_token=settings.META_WHATSAPP_ACCESS_TOKEN,
+            phone_number_id=settings.META_WHATSAPP_PHONE_NUMBER_ID,
+            api_version=settings.META_API_VERSION,
+        )
+    return DemoWhatsAppProvider()
 
 
 def get_llm_provider() -> "LLMProvider":

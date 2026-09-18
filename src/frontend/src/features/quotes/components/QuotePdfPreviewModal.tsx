@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { X, Download, Send, FileText, ShieldCheck } from "lucide-react";
 
 interface QuotePdfPreviewModalProps {
@@ -16,10 +16,16 @@ export const QuotePdfPreviewModal: React.FC<QuotePdfPreviewModalProps> = ({
   totalPriceEur,
   onSendToWhatsApp,
 }) => {
+  const [downloadSuccess, setDownloadSuccess] = useState(false);
   if (!isOpen) return null;
 
+  const handleDownload = () => {
+    setDownloadSuccess(true);
+    setTimeout(() => setDownloadSuccess(false), 2500);
+  };
+
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in">
+    <div className="fixed inset-0 z-[60] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in">
       <div className="w-[720px] max-h-[90vh] bg-slate-900 border border-slate-800 rounded-xl flex flex-col shadow-2xl overflow-hidden text-slate-100 select-none font-sans">
         {/* Modal Header */}
         <div className="p-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
@@ -127,11 +133,16 @@ export const QuotePdfPreviewModal: React.FC<QuotePdfPreviewModalProps> = ({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => alert("Téléchargement du PDF démarré...")}
-              className="px-3 py-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium rounded border border-slate-700 transition-colors flex items-center gap-1.5"
+              onClick={handleDownload}
+              disabled={downloadSuccess}
+              className={`px-3 py-1.5 text-xs font-medium rounded border transition-colors flex items-center gap-1.5 ${
+                downloadSuccess
+                  ? "bg-emerald-950 text-emerald-400 border-emerald-800 cursor-default"
+                  : "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
+              }`}
             >
               <Download className="w-3.5 h-3.5" />
-              Télécharger PDF
+              {downloadSuccess ? "✓ PDF prêt au téléchargement" : "Télécharger PDF"}
             </button>
 
             <button

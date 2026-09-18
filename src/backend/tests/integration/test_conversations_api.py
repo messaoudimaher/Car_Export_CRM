@@ -9,6 +9,7 @@ from fastapi import FastAPI, status
 from httpx import ASGITransport, AsyncClient
 
 from app.api.deps import CurrentUser, get_current_user, get_whatsapp_provider
+from app.core.config import settings
 from app.models.conversation import WhatsAppConversation
 from app.models.customer import Customer
 from app.models.message import Message
@@ -338,7 +339,7 @@ async def test_post_outbound_whatsapp_message(
             assert payload["data"]["sender_type"] == "Agent"
             assert payload["data"]["content"] == "Voici les détails du véhicule"
             mock_whatsapp_provider.send_text_message.assert_awaited_once_with(
-                phone_number_id="default_phone_number_id",
+                phone_number_id=settings.META_WHATSAPP_PHONE_NUMBER_ID,
                 recipient_e164="+21698123456",
                 text_body="Voici les détails du véhicule",
             )

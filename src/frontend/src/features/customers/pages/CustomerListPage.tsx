@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Users, Search, Phone, Mail, Globe, ShieldCheck, MessageSquare, Plus } from "lucide-react";
+import { Users, Search, Phone, Mail, Globe, ShieldCheck, MessageSquare, Plus, Pencil, X, Save } from "lucide-react";
 import { CustomerContext } from "../../inbox/types";
 
 const MOCK_CUSTOMERS: CustomerContext[] = [
@@ -36,10 +36,16 @@ const MOCK_CUSTOMERS: CustomerContext[] = [
 ];
 
 export const CustomerListPage: React.FC = () => {
+  const [customers, setCustomers] = useState<CustomerContext[]>(MOCK_CUSTOMERS);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterFcr, setFilterFcr] = useState<"ALL" | "FCR_ONLY" | "STANDARD">("ALL");
 
-  const filteredCustomers = MOCK_CUSTOMERS.filter((c) => {
+  // Modal state: null = closed, "create" = new, or customer id for edit
+  const [modalMode, setModalMode] = useState<null | "create" | string>(null);
+  const [editForm, setEditForm] = useState({ fullName: "", email: "", country: "", fcrEligible: false });
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  const filteredCustomers = customers.filter((c) => {
     const matchesSearch =
       c.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.phoneE164.includes(searchQuery) ||
@@ -49,6 +55,48 @@ export const CustomerListPage: React.FC = () => {
     if (filterFcr === "STANDARD") return matchesSearch && !c.fcrEligible;
     return matchesSearch;
   });
+
+  const openEditModal = (c: CustomerContext) => {
+    setEditForm({ fullName: c.fullName, email: c.email || "", country: c.country, fcrEligible: c.fcrEligible });
+    setSaveSuccess(false);
+    setModalMode(c.id);
+  };
+
+  const openCreateModal = () => {
+    setEditForm({ fullName: "", email: "", country: "Tunisia", fcrEligible: false });
+    setSaveSuccess(false);
+    setModalMode("create");
+  };
+
+  const closeModal = () => { setModalMode(null); setSaveSuccess(false); };
+
+  const handleSave = () => {
+    if (!editForm.fullName.trim()) return;
+    const now = new Date().toISOString();
+    if (modalMode === "create") {
+      const newCustomer: CustomerContext = {
+        id: `cust_${Date.now()}`,
+        fullName: editForm.fullName.trim(),
+        email: editForm.email.trim() || undefined,
+        country: editForm.country.trim() || "Tunisia",
+        phoneE164: "+216 -- --- ---",
+        fcrEligible: editForm.fcrEligible,
+        notes: "",
+        createdAt: now,
+      };
+      setCustomers((prev) => [newCustomer, ...prev]);
+    } else {
+      setCustomers((prev) =>
+        prev.map((c) =>
+          c.id === modalMode
+            ? { ...c, fullName: editForm.fullName.trim(), email: editForm.email.trim() || undefined, country: editForm.country.trim() || "Tunisia", fcrEligible: editForm.fcrEligible }
+            : c
+        )
+      );
+    }
+    setSaveSuccess(true);
+    setTimeout(closeModal, 800);
+  };
 
   return (
     <div className="flex-1 flex flex-col bg-slate-950 p-6 overflow-y-auto font-sans text-slate-100 select-none">
@@ -66,6 +114,7 @@ export const CustomerListPage: React.FC = () => {
 
         <button
           type="button"
+          onClick={openCreateModal}
           className="px-3.5 py-2 text-xs bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg transition-colors flex items-center gap-1.5 shadow-sm"
         >
           <Plus className="w-4 h-4" />
@@ -186,13 +235,23 @@ export const CustomerListPage: React.FC = () => {
                   </td>
 
                   <td className="p-3 text-right">
-                    <button
-                      type="button"
-                      className="px-2.5 py-1 text-[11px] bg-slate-800 hover:bg-slate-700 text-blue-400 rounded border border-slate-700 transition-colors flex items-center gap-1 ml-auto"
-                    >
-                      <MessageSquare className="w-3 h-3" />
-                      Ouvrir Chat
-                    </button>
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => openEditModal(c)}
+                        className="px-2 py-1 text-[11px] bg-slate-800 hover:bg-slate-700 text-amber-400 rounded border border-slate-700 transition-colors flex items-center gap-1"
+                      >
+                        <Pencil className="w-3 h-3" />
+                        Modifier
+                      </button>
+                      <button
+                        type="button"
+                        className="px-2.5 py-1 text-[11px] bg-slate-800 hover:bg-slate-700 text-blue-400 rounded border border-slate-700 transition-colors flex items-center gap-1"
+                      >
+                        <MessageSquare className="w-3 h-3" />
+                        Ouvrir Chat
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -200,6 +259,53 @@ export const CustomerListPage: React.FC = () => {
           </tbody>
         </table>
       </div>
+
+      {/* Create / Edit Customer Modal */}
+      {modalMode !== null && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-md shadow-2xl font-sans text-slate-100">
+            <div className="flex items-center justify-between p-4 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-blue-400" />
+                <h2 className="text-sm font-bold">{modalMode === "create" ? "Nouveau Client" : "Modifier le Client"}</h2>
+              </div>
+              <button onClick={closeModal} className="text-slate-400 hover:text-slate-200"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="text-[10px] text-slate-400 block mb-1 uppercase font-mono">Nom Complet *</label>
+                <input type="text" value={editForm.fullName} onChange={(e) => setEditForm((f) => ({ ...f, fullName: e.target.value }))} placeholder="Ex: Mohamed Ben Ali" className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500" />
+              </div>
+              <div>
+                <label className="text-[10px] text-slate-400 block mb-1 uppercase font-mono">Email</label>
+                <input type="email" value={editForm.email} onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))} placeholder="Ex: client@gmail.com" className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500" />
+              </div>
+              <div>
+                <label className="text-[10px] text-slate-400 block mb-1 uppercase font-mono">Pays</label>
+                <select value={editForm.country} onChange={(e) => setEditForm((f) => ({ ...f, country: e.target.value }))} className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500">
+                  <option value="Tunisia">Tunisie</option>
+                  <option value="France / Tunisia">France / Tunisie (TRE)</option>
+                  <option value="Germany">Allemagne</option>
+                  <option value="Other">Autre</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-3 p-3 bg-slate-950 rounded border border-slate-800">
+                <input type="checkbox" id="fcr-eligible-check" checked={editForm.fcrEligible} onChange={(e) => setEditForm((f) => ({ ...f, fcrEligible: e.target.checked }))} className="w-4 h-4 accent-emerald-500" />
+                <label htmlFor="fcr-eligible-check" className="text-xs text-slate-200 cursor-pointer">
+                  Client éligible au régime FCR TRE (Transfert Résidents à l'Étranger)
+                </label>
+              </div>
+            </div>
+            <div className="flex items-center justify-between p-4 border-t border-slate-800">
+              <button type="button" onClick={closeModal} className="px-3 py-1.5 text-xs bg-slate-800 text-slate-300 rounded hover:bg-slate-700 transition-colors">Annuler</button>
+              <button type="button" onClick={handleSave} disabled={saveSuccess} className={`px-4 py-1.5 text-xs font-medium rounded transition-colors flex items-center gap-1.5 ${saveSuccess ? "bg-emerald-600 text-white cursor-default" : "bg-blue-600 hover:bg-blue-500 text-white"}`}>
+                <Save className="w-3.5 h-3.5" />
+                {saveSuccess ? "✓ Enregistré !" : modalMode === "create" ? "Créer le Client" : "Enregistrer"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -11,7 +11,7 @@ T = TypeVar("T", bound=BaseModel)
 class LLMCompletionRequest(BaseModel):
     """Input parameters for an LLM text generation or structured extraction request."""
 
-    prompt: str = Field(..., description="User prompt or main text input")
+    prompt: str = Field(default="", description="User prompt or main text input")
     system_prompt: str | None = Field(
         default=None, description="Optional system instruction prompt"
     )

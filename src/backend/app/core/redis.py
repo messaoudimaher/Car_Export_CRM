@@ -17,11 +17,15 @@ _redis_pool: ArqRedis | None = None
 
 
 async def get_redis_pool() -> ArqRedis:
-    """Return singleton ArqRedis pool connection instance."""
+    """Return singleton ArqRedis pool connection instance with fast failure timeout."""
     global _redis_pool
     if _redis_pool is None:
+        import asyncio
         redis_settings = get_redis_settings()
-        _redis_pool = await create_pool(redis_settings)
+        _redis_pool = await asyncio.wait_for(
+            create_pool(redis_settings, retry=0),
+            timeout=1.0,
+        )
     return _redis_pool
 
 

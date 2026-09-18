@@ -17,7 +17,8 @@ class AgentBehaviorPolicy(BaseModel):
 
     provider: str = Field(default="gemini", description="Underlying LLM provider")
     model: str = Field(default="gemini-3.6-flash", description="Configured LLM model")
-    mode: AgentMode = Field(default=AgentMode.DRAFT_THEN_SEND, description="Operational interaction mode")
+    mode: AgentMode = Field(default=AgentMode.AUTONOMOUS, description="Operational interaction mode")
+    auto_reply: bool = Field(default=True, description="Automatically dispatch AI response without human approval")
     require_customer_confirmation: bool = Field(default=True, description="Enforce customer confirmation before action")
     allow_price_commitments: bool = Field(default=False, description="Block AI from committing to fixed prices")
     allow_availability_commitments: bool = Field(default=False, description="Block AI from guaranteeing stock availability")

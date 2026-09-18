@@ -4,7 +4,7 @@ import { inboxKeys } from "../../../shared/api/queryKeys";
 import { ConversationThread, ChatMessage, InboxFilter } from "../types";
 
 // Mock Fallback Data for Inbox Workstation Demonstration
-const MOCK_THREADS: ConversationThread[] = [
+export const MOCK_THREADS: ConversationThread[] = [
   {
     id: "th_01h9x8a1",
     customerId: "cust_991",
@@ -189,31 +189,45 @@ export function useThreads(filter?: InboxFilter) {
     queryKey: inboxKeys.threads(filter),
     queryFn: async () => {
       try {
-        const res = await apiClient.get<ConversationThread[]>("/conversations", { params: filter });
-        return res.data;
-      } catch {
-        // Return filtered mock data on backend pending or network disconnect
-        let threads = [...MOCK_THREADS];
+        const queryParams: Record<string, any> = {};
         if (filter?.status && filter.status !== "ALL") {
-          if (filter.status === "MINE") {
-            threads = threads.filter((t) => t.assignedAgentId === "agent_01");
-          } else {
-            threads = threads.filter((t) => t.status === filter.status);
-          }
+          queryParams.status = filter.status;
         }
-        if (filter?.searchQuery) {
-          const q = filter.searchQuery.toLowerCase();
-          threads = threads.filter(
-            (t) =>
-              t.customerName.toLowerCase().includes(q) ||
-              t.customerPhone.includes(q) ||
-              t.lastMessageSnippet.toLowerCase().includes(q)
-          );
+        const res = await apiClient.get<any>("/conversations", { params: queryParams });
+        const rawList = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+        if (rawList.length > 0) {
+          return rawList.map((c: any) => ({
+            id: c.id,
+            customerId: c.customer_id || c.customerId || `cust_${c.id}`,
+            customerName: c.customer_name || c.customerName || c.customer_phone_e164 || "Client WhatsApp",
+            customerPhone: c.customer_phone_e164 || c.customerPhone || "+216 -- --- ---",
+            channel: "WHATSAPP",
+            status: c.status || "UNASSIGNED",
+            unreadCount: c.unread_count || 0,
+            lastMessageSnippet: c.last_message_content || c.lastMessageSnippet || "Message reçu",
+            lastActivityAt: c.last_message_at || c.lastActivityAt || new Date().toISOString(),
+            assignedAgentId: c.assigned_agent_id,
+            assignedAgentName: c.assigned_agent_name,
+            customer: {
+              id: c.customer_id || `cust_${c.id}`,
+              fullName: c.customer_name || c.customer_phone_e164 || "Client WhatsApp",
+              phoneE164: c.customer_phone_e164 || "+216 -- --- ---",
+              fcrEligible: true,
+              country: "Tunisia",
+              createdAt: c.created_at || new Date().toISOString(),
+            },
+            activeAiUnderstanding: c.active_ai_understanding,
+            activeAiSuggestion: c.active_ai_suggestion,
+          }));
         }
-        return threads;
+        return [];
+      } catch (err) {
+        console.warn("Failed to fetch backend conversations, using fallback", err);
+        return [];
       }
     },
-    staleTime: 5000,
+    refetchInterval: 3000,
+    staleTime: 2000,
   });
 }
 
@@ -223,13 +237,23 @@ export function useThreadMessages(threadId?: string) {
     enabled: Boolean(threadId),
     queryFn: async () => {
       try {
-        const res = await apiClient.get<ChatMessage[]>(`/conversations/${threadId}/messages`);
-        return res.data;
+        const res = await apiClient.get<any>(`/conversations/${threadId}/messages`);
+        const rawMsgs = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+        return rawMsgs.map((m: any) => ({
+          id: m.id,
+          threadId: m.conversation_id || threadId,
+          direction: m.direction?.toUpperCase() === "OUTBOUND" ? "OUTBOUND" : "INBOUND",
+          senderName: m.sender_type === "Customer" ? "Client" : "Conseiller Commercial",
+          content: m.content || "",
+          status: m.delivery_status || "DELIVERED",
+          timestamp: m.created_at || new Date().toISOString(),
+        }));
       } catch {
         return MOCK_MESSAGES[threadId || ""] || [];
       }
     },
-    staleTime: 5000,
+    refetchInterval: 3000,
+    staleTime: 2000,
   });
 }
 
@@ -238,23 +262,20 @@ export function useSendMessage() {
   return useMutation({
     mutationFn: async ({ threadId, content }: { threadId: string; content: string }) => {
       try {
-        const res = await apiClient.post<ChatMessage>(`/conversations/${threadId}/messages`, { content });
-        return res.data;
-      } catch {
-        const newMsg: ChatMessage = {
-          id: `msg_${Date.now()}`,
+        const res = await apiClient.post<any>(`/conversations/${threadId}/messages`, { content });
+        const m = res.data?.data || res.data;
+        return {
+          id: m.id || `msg_${Date.now()}`,
           threadId,
-          direction: "OUTBOUND",
+          direction: "OUTBOUND" as const,
           senderName: "Conseiller Commercial",
-          content,
-          status: "SENT",
-          timestamp: new Date().toISOString(),
+          content: m.content || content,
+          status: "SENT" as const,
+          timestamp: m.created_at || new Date().toISOString(),
         };
-        if (!MOCK_MESSAGES[threadId]) {
-          MOCK_MESSAGES[threadId] = [];
-        }
-        MOCK_MESSAGES[threadId].push(newMsg);
-        return newMsg;
+      } catch (err) {
+        console.error("Failed to post outbound message:", err);
+        throw err;
       }
     },
     onSuccess: (_, variables) => {

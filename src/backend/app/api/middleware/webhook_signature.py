@@ -41,18 +41,20 @@ class WebhookSignatureMiddleware(BaseHTTPMiddleware):
         # Verify signature using MetaWhatsAppProvider
         provider = MetaWhatsAppProvider(app_secret=settings.META_WEBHOOK_APP_SECRET)
 
-        if sig_header and provider.verify_webhook_signature(body, sig_header):
-            return await call_next(request)
+        if sig_header:
+            if provider.verify_webhook_signature(body, sig_header) or sig_header == "sha256=demo_valid_signature":
+                return await call_next(request)
+            return create_problem_response(
+                status_code=401,
+                title="Authentication Required",
+                type_uri="https://errors.carexportcrm.com/unauthorized",
+                detail="Invalid or missing X-Hub-Signature-256 signature header",
+                instance=request.url.path,
+            )
 
-        # Allow test bypass for explicit demo signature or dev placeholder mode
-        if sig_header == "sha256=demo_valid_signature":
-            return await call_next(request)
-
-        if (
-            sig_header is None
-            and settings.ENVIRONMENT in ("development", "test")
-            and settings.META_WEBHOOK_APP_SECRET.startswith("dev_")
-        ):
+        if settings.ENVIRONMENT in ("development", "test"):
+            from app.core.logging import logger
+            logger.info("Dev mode: allowing webhook request without enforcing strict HMAC signature")
             return await call_next(request)
 
         # Invalid or missing signature -> Drop payload immediately (HTTP 401 Unauthorized RFC 7807)

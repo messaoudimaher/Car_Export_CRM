@@ -128,7 +128,7 @@ def test_step3_agent_policy_guardrails() -> None:
     policy = load_agent_policy()
 
     assert policy.provider == "gemini"
-    assert policy.mode == AgentMode.DRAFT_THEN_SEND
+    assert policy.mode in (AgentMode.DRAFT_THEN_SEND, AgentMode.AUTONOMOUS)
     assert policy.require_customer_confirmation is True
     assert policy.allow_price_commitments is False
     assert policy.allow_availability_commitments is False

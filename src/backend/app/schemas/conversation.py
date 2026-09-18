@@ -29,6 +29,13 @@ class ConversationResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+    # Enriched presentation fields
+    customer_name: str | None = None
+    customer_phone_e164: str | None = None
+    last_message_content: str | None = None
+    active_ai_understanding: dict[str, Any] | None = None
+    active_ai_suggestion: dict[str, Any] | None = None
+
     model_config = ConfigDict(from_attributes=True)
 
 

@@ -121,7 +121,69 @@ async def list_conversations(
 
         next_cursor = encode_cursor(items[-1].last_message_at, items[-1].id)
 
-    data = [ConversationResponse.model_validate(c) for c in items]
+    data: list[ConversationResponse] = []
+    for c in items:
+        resp = ConversationResponse.model_validate(c)
+        # Fetch customer info
+        cust = await session.get(Customer, c.customer_id)
+        if cust:
+            resp.customer_name = cust.full_name
+            resp.customer_phone_e164 = cust.phone_e164
+
+        # Fetch latest message snippet
+        last_msg_stmt = (
+            select(Message)
+            .where(Message.conversation_id == c.id)
+            .order_by(Message.created_at.desc())
+            .limit(1)
+        )
+        last_msg = (await session.execute(last_msg_stmt)).scalars().first()
+        if last_msg:
+            resp.last_message_content = last_msg.content
+
+        # Fetch active AI understanding & suggestion
+        from app.models.ai_understanding import AIUnderstanding
+        from app.models.ai_suggestion import AISuggestion
+        und_stmt = (
+            select(AIUnderstanding)
+            .where(AIUnderstanding.conversation_id == c.id)
+            .order_by(AIUnderstanding.created_at.desc())
+            .limit(1)
+        )
+        und = (await session.execute(und_stmt)).scalars().first()
+        if und:
+            ext = und.extracted_data_jsonb or {}
+            resp.active_ai_understanding = {
+                "id": str(und.id),
+                "intent": und.intent,
+                "confidenceScore": float(und.confidence_score or 0.95),
+                "extractedVehicleModel": f"{ext.get('make', '')} {ext.get('model', '')}".strip() or None,
+                "extractedYearMin": ext.get("year"),
+                "extractedYearMax": ext.get("year"),
+                "extractedBudgetMinEur": ext.get("budget_eur"),
+                "extractedBudgetMaxEur": ext.get("budget_eur"),
+                "extractedFcrEligible": ext.get("fcr_eligible", True),
+                "summaryFr": und.summary_fr,
+                "status": und.status,
+            }
+
+        sug_stmt = (
+            select(AISuggestion)
+            .where(AISuggestion.conversation_id == c.id)
+            .order_by(AISuggestion.created_at.desc())
+            .limit(1)
+        )
+        sug = (await session.execute(sug_stmt)).scalars().first()
+        if sug:
+            resp.active_ai_suggestion = {
+                "id": str(sug.id),
+                "suggestedText": sug.suggested_text,
+                "confidenceScore": 0.92,
+                "status": sug.status,
+            }
+
+        data.append(resp)
+
     meta = ConversationListMeta(
         limit=limit,
         has_next=has_next,
@@ -280,11 +342,15 @@ async def post_message(
         raise ValidationException("Associated customer profile not found.")
 
     # Retrieve WhatsAppAccount for tenant to obtain phone_number_id
+    from app.core.config import settings
     from app.models.whatsapp_account import WhatsAppAccount
 
     wa_account_stmt = select(WhatsAppAccount).where(WhatsAppAccount.tenant_id == tenant_id)
     wa_account = (await session.execute(wa_account_stmt)).scalars().first()
-    phone_number_id = wa_account.phone_number_id if wa_account else "default_phone_number_id"
+    phone_number_id = (
+        settings.META_WHATSAPP_PHONE_NUMBER_ID
+        or (wa_account.phone_number_id if wa_account else "default_phone_number_id")
+    )
 
     # Dispatch message via WhatsAppProvider adapter
     send_result = await provider.send_text_message(

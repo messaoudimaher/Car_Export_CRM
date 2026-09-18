@@ -105,14 +105,14 @@ async def test_create_quotation_high_discount_pending_approval_and_admin_approva
         admin_user = User(
             tenant_id=tenant.id,
             email=f"admin-{uuid.uuid4().hex[:6]}@example.com",
-            password_hash="hashed_pw_dummy_1234567890",  # noqa: S106
+            hashed_password="hashed_pw_dummy_1234567890",  # noqa: S106
             full_name="Admin Manager",
             role=UserRole.TENANT_ADMIN.value,
         )
         sales_rep = User(
             tenant_id=tenant.id,
             email=f"sales-{uuid.uuid4().hex[:6]}@example.com",
-            password_hash="hashed_pw_dummy_1234567890",  # noqa: S106
+            hashed_password="hashed_pw_dummy_1234567890",  # noqa: S106
             full_name="Sales Rep",
             role=UserRole.SALES_AGENT.value,
         )
@@ -168,7 +168,7 @@ async def test_reject_quotation_by_admin() -> None:
         admin_user = User(
             tenant_id=tenant.id,
             email=f"admin-{uuid.uuid4().hex[:6]}@example.com",
-            password_hash="hashed_pw_dummy_1234567890",  # noqa: S106
+            hashed_password="hashed_pw_dummy_1234567890",  # noqa: S106
             full_name="Admin Manager",
             role=UserRole.TENANT_ADMIN.value,
         )
