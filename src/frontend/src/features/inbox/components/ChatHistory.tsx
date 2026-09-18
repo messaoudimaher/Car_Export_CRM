@@ -1,8 +1,7 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Send, CheckCheck, Check, Clock, ShieldCheck, PhoneCall, Paperclip, Sparkles, ShieldAlert } from "lucide-react";
-import { ChatMessage, ConversationThread, AiSuggestion } from "../types";
+import { ChatMessage, ConversationThread } from "../types";
 import { AiUnderstandingCard } from "./AiUnderstandingCard";
-import { AiSuggestionCard } from "./AiSuggestionCard";
 
 interface ChatHistoryProps {
   thread?: ConversationThread;
@@ -22,12 +21,10 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
   const [content, setContent] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeUnderstanding, setActiveUnderstanding] = useState(thread?.activeAiUnderstanding);
-  const [activeSuggestion, setActiveSuggestion] = useState(thread?.activeAiSuggestion);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setActiveUnderstanding(thread?.activeAiUnderstanding);
-    setActiveSuggestion(thread?.activeAiSuggestion);
   }, [thread]);
 
   const scrollToBottom = () => {
@@ -36,7 +33,7 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, activeUnderstanding, activeSuggestion]);
+  }, [messages, activeUnderstanding]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,23 +57,6 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSubmit(e);
-    }
-  };
-
-  const handleInsertIntoEditor = useCallback((text: string) => {
-    setContent(text);
-    replyInputRef?.current?.focus();
-  }, [replyInputRef]);
-
-  const handleApproveAndSendSuggestion = async (suggestion: AiSuggestion) => {
-    try {
-      setIsSubmitting(true);
-      await onSendMessage(suggestion.suggestedText);
-      if (activeSuggestion) {
-        setActiveSuggestion({ ...activeSuggestion, status: "APPROVED" });
-      }
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -186,16 +166,6 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
               </div>
             );
           })
-        )}
-
-        {/* Tier 3: HITL AI Reply Suggestion Card */}
-        {activeSuggestion && (
-          <AiSuggestionCard
-            suggestion={activeSuggestion}
-            onApproveAndSend={handleApproveAndSendSuggestion}
-            onInsertIntoEditor={handleInsertIntoEditor}
-            onReject={() => setActiveSuggestion(undefined)}
-          />
         )}
 
         {/* Tier 2: Provisional AI Extraction Card (Indigo) */}

@@ -1,8 +1,8 @@
 agent:
   provider: gemini
   model: gemini-3.5-flash-lite
-  mode: draft_then_send
-  auto_reply: false
+  mode: autonomous
+  auto_reply: true
   require_customer_confirmation: true
   allow_price_commitments: false
   allow_availability_commitments: false
