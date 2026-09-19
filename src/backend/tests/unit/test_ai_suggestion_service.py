@@ -162,7 +162,7 @@ async def test_get_list_and_update_suggestion_status_db() -> None:
 
     async for db in get_db_session():
         tenant = Tenant(name="Test Suggestion List Tenant", slug=f"t-{uuid.uuid4().hex[:8]}")
-        customer = Customer(tenant_id=tenant.id, phone="+21698222333", full_name="Ines Gharbi")
+        customer = Customer(tenant_id=tenant.id, phone_e164="+21698222333", full_name="Ines Gharbi")
         conv = WhatsAppConversation(tenant_id=tenant.id, customer_id=customer.id)
         db.add_all([tenant, customer, conv])
         await db.flush()

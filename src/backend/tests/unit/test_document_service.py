@@ -93,7 +93,7 @@ async def test_document_service_upload_initiate_and_complete_flow(tmp_path: Path
             tenant_id=tenant.id,
             first_name="Mehdi",
             last_name="Trabelsi",
-            phone_number=f"+21698{uuid.uuid4().int % 1000000:06d}",
+            phone_e164=f"+21698{uuid.uuid4().int % 1000000:06d}",
         )
         session.add(customer)
         await session.flush()

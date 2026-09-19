@@ -367,18 +367,25 @@ class AgentOrchestrator:
             elif vreq.status != VehicleRequestStatus.QUALIFIED:
                 vreq.status = VehicleRequestStatus.COLLECTING
 
-        # 7. Automatic Outbound Response Dispatch via WhatsApp
+        # 7. Automatic Outbound Response Dispatch via WhatsApp (Safe Failure Isolation)
         draft_reply = decision.response_text.strip()
         if draft_reply:
             if timing_metrics:
                 timing_metrics.mark_outbound_started()
 
             target_phone_id = settings.META_WHATSAPP_PHONE_NUMBER_ID or phone_number_id
-            send_res = await self.whatsapp.send_text_message(
-                phone_number_id=target_phone_id,
-                recipient_e164=from_phone_e164,
-                text_body=draft_reply,
-            )
+            try:
+                send_res = await self.whatsapp.send_text_message(
+                    phone_number_id=target_phone_id,
+                    recipient_e164=from_phone_e164,
+                    text_body=draft_reply,
+                )
+                wamid = send_res.wamid
+                delivery_status = "Sent"
+            except Exception as send_err:
+                logger.error(f"Meta outbound WhatsApp API delivery failed: {send_err}", exc_info=True)
+                wamid = f"failed.meta.{uuid.uuid4().hex[:8]}"
+                delivery_status = "Failed"
 
             if timing_metrics:
                 timing_metrics.mark_outbound_completed()
@@ -390,9 +397,9 @@ class AgentOrchestrator:
                 direction="Outbound",
                 sender_type="AI_BOT",
                 content=draft_reply,
-                provider_message_id=send_res.wamid,
+                provider_message_id=wamid,
                 message_type="text",
-                delivery_status="Sent",
+                delivery_status=delivery_status,
             )
             self.db.add(outbound_msg)
 
