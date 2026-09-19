@@ -275,12 +275,24 @@ def _find_config_file(config_path: str | Path | None = None) -> Path | None:
     return None
 
 
-def load_company_knowledge(config_path: str | Path | None = None) -> CompanyKnowledge:
-    """Load verified company knowledge from YAML with strict Pydantic validation."""
+# In-memory cached singleton
+_CACHED_KNOWLEDGE: CompanyKnowledge | None = None
+_CACHED_MTIME: float = 0.0
+_CACHED_GROUNDED_PROMPT: str | None = None
+
+
+def load_company_knowledge(config_path: str | Path | None = None, force_reload: bool = False) -> CompanyKnowledge:
+    """Load verified company knowledge with high-performance in-memory caching."""
+    global _CACHED_KNOWLEDGE, _CACHED_MTIME, _CACHED_GROUNDED_PROMPT
+
     found_path = _find_config_file(config_path)
 
     if found_path and found_path.exists():
         try:
+            current_mtime = found_path.stat().st_mtime
+            if not force_reload and _CACHED_KNOWLEDGE is not None and _CACHED_MTIME == current_mtime:
+                return _CACHED_KNOWLEDGE
+
             with open(found_path, "r", encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {}
 
@@ -307,7 +319,7 @@ def load_company_knowledge(config_path: str | Path | None = None) -> CompanyKnow
                         )
                     )
 
-            return CompanyKnowledge(
+            knowledge = CompanyKnowledge(
                 company=CompanyProfile(**comp_raw),
                 fcr=FCRBusinessRules(**fcr_raw),
                 shipping=ShippingPolicy(**shipping_raw),
@@ -316,8 +328,26 @@ def load_company_knowledge(config_path: str | Path | None = None) -> CompanyKnow
                 fallback=FallbackPolicy(**fallback_raw),
                 faq_items=faq_items,
             )
+
+            _CACHED_KNOWLEDGE = knowledge
+            _CACHED_MTIME = current_mtime
+            _CACHED_GROUNDED_PROMPT = knowledge.to_grounded_context_prompt()
+            return _CACHED_KNOWLEDGE
         except Exception:
-            # Safe default fallback if parsing fails
+            if _CACHED_KNOWLEDGE:
+                return _CACHED_KNOWLEDGE
             return CompanyKnowledge()
 
+    if _CACHED_KNOWLEDGE:
+        return _CACHED_KNOWLEDGE
     return CompanyKnowledge()
+
+
+def get_cached_grounded_context_prompt() -> str:
+    """Retrieve pre-formatted grounded context prompt string in sub-millisecond time."""
+    global _CACHED_GROUNDED_PROMPT
+    if _CACHED_GROUNDED_PROMPT is None:
+        knowledge = load_company_knowledge()
+        _CACHED_GROUNDED_PROMPT = knowledge.to_grounded_context_prompt()
+    return _CACHED_GROUNDED_PROMPT
+

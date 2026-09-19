@@ -30,13 +30,14 @@ from app.core.config import settings
 from app.core.logging import logger
 from app.core.whatsapp_telemetry import WhatsAppTimingMetrics
 from app.models.conversation import WhatsAppConversation
+from app.models.customer import Customer
 from app.models.message import Message
 from app.models.vehicle_request import VehicleRequest, VehicleRequestStatus, check_fcr_compliance
 from app.ports.llm import LLMCompletionRequest, LLMProvider
 from app.ports.whatsapp import WhatsAppProvider
 from app.schemas.agent_decision import AgentDecision
 from app.schemas.vehicle_request_state import validate_vehicle_criteria
-from app.services.company_knowledge import load_company_knowledge
+from app.services.company_knowledge import get_cached_grounded_context_prompt, load_company_knowledge
 from app.services.conversation_memory import load_bounded_conversation_memory
 from app.services.csv_export_service import csv_export_service
 from app.services.owner_notifier import OwnerNotificationService
@@ -74,13 +75,22 @@ class AgentOrchestrator:
         timing_metrics: WhatsAppTimingMetrics | None = None,
     ) -> AgentDecision:
         """Execute single-pass autonomous reasoning turn and dispatch automatic response."""
-        # 1. Load conversation state & verify AI authorization
-        stmt_conv = select(WhatsAppConversation).where(WhatsAppConversation.id == conversation_id)
-        conv_res = await self.db.execute(stmt_conv)
-        conversation = conv_res.scalar_one_or_none()
+        if timing_metrics:
+            timing_metrics.mark_db_read_started()
 
-        if not conversation:
+        # 1. High-Performance DB Read: Fetch conversation & customer in a single joined query
+        stmt_conv = (
+            select(WhatsAppConversation, Customer)
+            .join(Customer, Customer.id == WhatsAppConversation.customer_id, isouter=True)
+            .where(WhatsAppConversation.id == conversation_id)
+        )
+        conv_res = await self.db.execute(stmt_conv)
+        row = conv_res.first()
+
+        if not row:
             raise ValueError(f"Conversation '{conversation_id}' not found.")
+
+        conversation, customer = row
 
         # STRICT HUMAN INTERVENTION GATE:
         # When HUMAN_ACTIVE or mode == HUMAN, AI automatic replies MUST STOP.
@@ -88,6 +98,8 @@ class AgentOrchestrator:
             conversation.mode == ConversationMode.HUMAN.value
             or conversation.conversation_state == ConversationState.HUMAN_ACTIVE.value
         ):
+            if timing_metrics:
+                timing_metrics.mark_db_read_completed()
             logger.info(
                 "AGENT_TURN_SKIPPED_HUMAN_ACTIVE",
                 extra={"conversation_id": str(conversation_id)},
@@ -97,13 +109,21 @@ class AgentOrchestrator:
                 response_text="Human representative active.",
             )
 
-        # 2. Assemble bounded memory context & dynamic company knowledge
-        self.knowledge = load_company_knowledge()
-        memory = await load_bounded_conversation_memory(self.db, conversation_id, max_recent_messages=15)
-        knowledge_context = self.knowledge.to_grounded_context_prompt()
+        # 2. Assemble bounded memory context reusing preloaded entities
+        memory = await load_bounded_conversation_memory(
+            self.db,
+            conversation_id,
+            max_recent_messages=15,
+            preloaded_conversation=conversation,
+            preloaded_customer=customer,
+        )
+        if timing_metrics:
+            timing_metrics.mark_db_read_completed()
+
+        # 3. Formulate unified single-pass system prompt with cached grounded knowledge
+        knowledge_context = get_cached_grounded_context_prompt()
         memory_context = memory.to_system_prompt_context()
 
-        # 3. Formulate unified single-pass system prompt
         system_prompt = (
             "You are the dedicated Autonomous AI Automotive Sales Agent for 'Auto Export Europe', "
             "specializing in European vehicle sourcing and export to Tunisia.\n"
@@ -111,18 +131,20 @@ class AgentOrchestrator:
             f"{memory_context}\n\n"
             f"{knowledge_context}\n\n"
             "CORE OPERATIONAL RULES:\n"
-            "1. MULTILINGUAL SUPPORT: Mirror the customer's language/dialect (French, Arabic, Tunisian Derja/Arabizi, English, German). Preserve technical vehicle terms.\n"
-            "2. ZERO FABRICATION OF COMPANY FACTS: You must NEVER invent company policies, guarantees, prices, or offices not stated in the verified knowledge base above.\n"
+            "1. MULTILINGUAL SUPPORT: Mirror customer's language/dialect (French, Arabic, Tunisian Derja/Arabizi, English, German). Preserve vehicle terms.\n"
+            "2. ZERO FABRICATION: Never invent company policies, guarantees, prices, or offices not stated in knowledge.\n"
             "3. NO BINDING COMMITMENTS: Never invent fixed vehicle prices or guarantee stock availability without confirmation.\n"
-            "4. UNAVAILABLE OR OUT-OF-SCOPE INFORMATION: If a customer asks for information or commitments not in the verified knowledge base (e.g., non-existent offices, fake 10-year warranties, crypto payments), politely state that a human advisor will verify and assist, and set human_attention_required=true.\n"
+            "4. OUT-OF-SCOPE: If customer asks for unverified info (crypto, 10-year warranty, fake offices), state a human advisor will assist, set human_attention_required=true.\n"
             "5. VEHICLE SOURCING FLOW:\n"
-            "   - Extract all mentioned criteria (make, model, year, fuel, transmission, budget, port, color, options).\n"
-            "   - If required criteria are missing (Make, Model, Year, Budget), acknowledge what they said and naturally ask for the next missing field.\n"
-            "   - When all required criteria are present, present a clean structured summary and ask for their explicit confirmation.\n"
-            "   - If customer asks an FAQ during vehicle collection, answer the FAQ directly using approved knowledge and smoothly continue the collection.\n"
-            "6. HUMAN ESCALATION: If customer explicitly requests a human advisor, has an unsupported complex complaint, asks out-of-scope company policies, or demands binding price discounts, set human_attention_required=true.\n"
+            "   - Extract criteria (make, model, year, fuel, transmission, budget, port, options).\n"
+            "   - If required criteria are missing (Make, Model, Year, Budget), acknowledge and ask for the next missing field.\n"
+            "   - When all required criteria are present, present a structured summary and ask for explicit confirmation.\n"
+            "   - If customer asks an FAQ, answer directly using approved knowledge and smoothly continue collection.\n"
+            "6. HUMAN ESCALATION: If customer asks for human, has complaint, asks out-of-scope policies, or demands price discounts, set human_attention_required=true.\n"
             "7. DIRECT WHATSAPP OUTPUT: In 'response_text', provide ONLY the clean message to send to the customer on WhatsApp."
         )
+        if timing_metrics:
+            timing_metrics.mark_context_constructed()
 
         llm_request = LLMCompletionRequest(
             messages=memory.chat_turns,
@@ -134,6 +156,9 @@ class AgentOrchestrator:
         )
 
         start_llm = time.perf_counter()
+        if timing_metrics:
+            timing_metrics.mark_llm_started()
+
         is_tech_err = False
         try:
             decision, llm_response = await self.llm.generate_structured_output(llm_request, AgentDecision)
@@ -162,6 +187,9 @@ class AgentOrchestrator:
                 response_text=fallback_msg,
                 reasoning=f"Fallback triggered due to LLM error: {llm_err}",
             )
+        finally:
+            if timing_metrics:
+                timing_metrics.mark_llm_completed()
 
         # 4. Merge Extracted Vehicle Criteria into Active Draft
         active_draft = dict(conversation.draft_data or {})
@@ -176,6 +204,8 @@ class AgentOrchestrator:
         active_draft["missing_fields"] = validated_state.missing_fields
         conversation.draft_data = dict(active_draft)
         flag_modified(conversation, "draft_data")
+        if timing_metrics:
+            timing_metrics.mark_validation_completed()
 
         # 5. Deterministic State Machine Transition (Human Exceptions Handling)
         has_criteria = bool(active_draft.get("make") or active_draft.get("model"))
@@ -366,5 +396,13 @@ class AgentOrchestrator:
             )
             self.db.add(outbound_msg)
 
+        if timing_metrics:
+            timing_metrics.mark_db_write_started()
+
         await self.db.commit()
+
+        if timing_metrics:
+            timing_metrics.mark_db_write_completed()
+            timing_metrics.log_summary()
+
         return decision

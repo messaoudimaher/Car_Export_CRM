@@ -93,30 +93,43 @@ async def load_bounded_conversation_memory(
     db: AsyncSession,
     conversation_id: Any,
     max_recent_messages: int = 15,
+    preloaded_conversation: WhatsAppConversation | None = None,
+    preloaded_customer: Customer | None = None,
 ) -> ConversationMemoryContext:
-    """Retrieve bounded sliding window of recent messages, customer profile, and active vehicle draft."""
-    # 1. Fetch conversation and customer
-    stmt_conv = select(WhatsAppConversation).where(WhatsAppConversation.id == conversation_id)
-    conv_res = await db.execute(stmt_conv)
-    conv = conv_res.scalar_one_or_none()
+    """Retrieve bounded sliding window of recent messages, customer profile, and active vehicle draft.
 
-    if not conv:
-        raise ValueError(f"Conversation '{conversation_id}' not found.")
+    Optimized for high-throughput execution by accepting preloaded entities and limiting DB scans.
+    """
+    # 1. Fetch conversation if not already in memory
+    if preloaded_conversation is not None:
+        conv = preloaded_conversation
+    else:
+        stmt_conv = select(WhatsAppConversation).where(WhatsAppConversation.id == conversation_id)
+        conv_res = await db.execute(stmt_conv)
+        conv = conv_res.scalar_one_or_none()
+        if not conv:
+            raise ValueError(f"Conversation '{conversation_id}' not found.")
 
-    stmt_cust = select(Customer).where(Customer.id == conv.customer_id)
-    cust_res = await db.execute(stmt_cust)
-    cust = cust_res.scalar_one_or_none()
+    # 2. Fetch customer if not already in memory
+    if preloaded_customer is not None:
+        cust = preloaded_customer
+    elif conv.customer_id:
+        stmt_cust = select(Customer).where(Customer.id == conv.customer_id)
+        cust_res = await db.execute(stmt_cust)
+        cust = cust_res.scalar_one_or_none()
+    else:
+        cust = None
 
-    # 2. Fetch recent messages bounded by max_recent_messages
+    # 3. Fetch ONLY the recent bounded message window directly via SQL limit
     stmt_msgs = (
         select(Message)
-        .where(Message.conversation_id == conversation_id)
-        .order_by(Message.created_at.asc())
+        .where(Message.conversation_id == conv.id)
+        .order_by(Message.created_at.desc())
+        .limit(max_recent_messages)
     )
-    all_msgs = list((await db.execute(stmt_msgs)).scalars().all())
-
-    # Keep only the last max_recent_messages
-    recent_msgs = all_msgs[-max_recent_messages:] if len(all_msgs) > max_recent_messages else all_msgs
+    recent_msgs_desc = list((await db.execute(stmt_msgs)).scalars().all())
+    # Reverse to chronological order
+    recent_msgs = list(reversed(recent_msgs_desc))
 
     chat_turns: list[dict[str, str]] = []
     turn_count = 0
@@ -148,3 +161,4 @@ async def load_bounded_conversation_memory(
         turn_count=turn_count,
         has_previous_outbound=has_previous_outbound,
     )
+
