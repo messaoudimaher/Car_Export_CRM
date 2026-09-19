@@ -1,0 +1,2 @@
+request_id,tenant_id,customer_id,customer_phone,customer_name,make,model,year,fuel_type,transmission,budget_eur,destination_port,fcr_compatible,additional_requirements,confirmed_at,status
+01a0ba6b-8b6d-7930-b3e7-861ddce163c5,01a0ba6b-8a6e-7fd7-aa87-1fe464d07cc0,01a0ba6b-8a6f-72cf-a15c-6936322c0357,+33698765432,,BMW,Série 3,2022,Diesel,Automatic,28000.00,Rades,true,,2026-09-19T16:06:45.790417+00:00,QUALIFIED

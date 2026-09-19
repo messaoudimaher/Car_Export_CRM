@@ -9,18 +9,28 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
+
+# Engine configuration: Use NullPool in test environment to prevent event loop connection leakage
+engine_kwargs: dict[str, object] = {
+    "pool_recycle": 1800,
+    "pool_pre_ping": True,
+    "echo": settings.DEBUG,
+    "future": True,
+}
+
+if settings.ENVIRONMENT == "test":
+    engine_kwargs["poolclass"] = NullPool
+else:
+    engine_kwargs["pool_size"] = settings.DATABASE_POOL_SIZE
+    engine_kwargs["max_overflow"] = settings.DATABASE_MAX_OVERFLOW
 
 # Create Async Engine
 async_engine: AsyncEngine = create_async_engine(
     settings.DATABASE_URL,
-    pool_size=settings.DATABASE_POOL_SIZE,
-    max_overflow=settings.DATABASE_MAX_OVERFLOW,
-    pool_recycle=1800,
-    pool_pre_ping=True,
-    echo=settings.DEBUG,
-    future=True,
+    **engine_kwargs,
 )
 
 # Async Session Factory
@@ -41,7 +51,8 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
             if session.is_active:
                 await session.commit()
         except Exception:
-            await session.rollback()
+            if session.is_active:
+                await session.rollback()
             raise
         finally:
             await session.close()

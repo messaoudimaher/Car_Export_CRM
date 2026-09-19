@@ -1,0 +1,2 @@
+﻿request_id,tenant_id,customer_id,customer_phone,customer_name,make,model,year,fuel_type,transmission,budget_eur,destination_port,fcr_compatible,additional_requirements,confirmed_at,status
+01a0ba6e-0754-77a3-9f42-aec7b63ec34d,01a0ba6e-066a-7472-a82d-4550c376789c,01a0ba6e-066b-7d26-ab7c-aab8b3ae636f,+49152998877,,Porsche,Macan,2022,,,60000.00,Rades,true,,2026-09-19T16:09:28.245108+00:00,QUALIFIED

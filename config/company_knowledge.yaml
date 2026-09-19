@@ -1,0 +1,116 @@
+company:
+  name: "Auto Export Europe"
+  legal_name: "Auto Export Europe GmbH"
+  country: "Germany / France / Tunisia"
+  operating_hours: "Monday - Saturday: 08:00 - 19:00 (CET)"
+  contact_email: "contact@autoexport.eu"
+  contact_phone: "+49 89 12345678"
+  source_countries:
+    - "Germany"
+    - "France"
+    - "Italy"
+    - "Belgium"
+    - "Netherlands"
+  destination_ports:
+    - "Rades"
+    - "La Goulette"
+    - "Bizerte"
+    - "Zarzis"
+  services:
+    - "Sourcing and on-site technical inspection of European vehicles"
+    - "Export customs clearance and European export documentation (EUR.1, EX-A, Certificate of Conformity CoC)"
+    - "Insured maritime shipping to Tunisian seaports (Rades, La Goulette, Bizerte, Zarzis)"
+    - "Customs advisory and assistance for FCR (Franchise Changement de Résidence) and TRE regime"
+
+business_rules:
+  fcr:
+    age_limit_years: 5
+    description: "Under Tunisian customs regulations, the FCR (Franchise Changement de Résidence) regime permits Tunisian citizens living abroad (TRE) to import one personal passenger vehicle with reduced customs duties or tax exemption. The vehicle must be 5 years old or less at first registration date."
+    eligibility_requirements:
+      - "Tunisian expatriate (TRE) residing abroad for at least 2 consecutive years"
+      - "Not having stayed in Tunisia for more than 120 days per 365-day period during the 2 years"
+      - "Adult of at least 18 years of age at departure/acquisition date"
+    required_documents:
+      - "Original European vehicle registration certificate (Carte grise / Fahrzeugbrief)"
+      - "European Certificate of Conformity (CoC)"
+      - "Commercial sales invoice (Facture d'achat acquittée)"
+      - "Export customs declaration (EX-A / Ausfuhranmeldung)"
+      - "Consular registration card (Carte consulaire) and passport stamps"
+
+  shipping:
+    departure_ports:
+      - "Marseille (France)"
+      - "Genoa (Italy)"
+      - "Antwerp (Belgium)"
+    arrival_ports:
+      - "Rades (Tunisia)"
+      - "La Goulette (Tunisia)"
+      - "Bizerte (Tunisia)"
+      - "Zarzis (Tunisia)"
+    average_transit_time: "10 to 20 business days from order confirmation and inspection to arrival at destination port"
+    maritime_insurance: "All shipped vehicles include full comprehensive maritime transit insurance."
+
+  inspection_and_quality:
+    inspection_standards: "Every vehicle undergoes a certified 120-point mechanical, electrical, structural, and diagnostic inspection before purchase."
+    history_report: "Official vehicle history and odometer verification (CARFAX / Autoviza / HistoVec) are systematically provided."
+    warranty_policy: "Vehicles benefit from any remaining manufacturer warranty. We do not provide unofficial or unauthorized long-term aftermarket warranties."
+
+  pricing_and_payment:
+    pricing_policy: "We do not provide binding fixed prices over instant chat. Total price is calculated transparently based on vehicle market cost, inspection fees, transport logistics, and Tunisian customs regime. An advisor prepares a detailed pro-forma quote once criteria are confirmed."
+    payment_methods:
+      - "Direct bank wire transfer (SEPA) to our corporate bank account"
+    deposit_terms: "A reservation deposit is required to secure the vehicle, with the balance settled upon completion of export documentation."
+    unsupported_payments:
+      - "Cash on delivery at destination port"
+      - "Cryptocurrency"
+      - "Unverified third-party escrow"
+
+fallback_and_escalation:
+  unsupported_topics:
+    - "10-year free warranty or fake guarantees"
+    - "Free vehicles or 100% discount promotions"
+    - "Offices outside Germany, France, and Tunisia (e.g. Tokyo, New York)"
+    - "Cryptocurrency or illegal tax evasion schemes"
+    - "Vehicles older than 5 years imported under FCR without special vintage license"
+  fallback_messages:
+    fr: "Pour cette demande spécifique non couverte par notre guide officiel, un conseiller commercial va vérifier les détails et vous répondre directement."
+    ar: "بخصوص هذا الاستفسار الخاص، سيقوم مستشارنا بالتحقق من التفاصيل والتواصل معكم مباشرة."
+    en: "For this specific inquiry not covered in our standard policy, a dedicated sales advisor will verify the details and assist you directly."
+    de: "Für diese spezifische Anfrage wird ein Kundenberater die Details prüfen und sich direkt mit Ihnen in Verbindung setzen."
+
+faq:
+  - id: "faq-export-process"
+    category: "process"
+    question: "Comment se déroule l'exportation vers la Tunisie ?"
+    answer: "Nous prenons en charge la totalité du processus : sourcing et inspection du véhicule en Europe (120 points de contrôle), formalités douanières d'export (EX-A, EUR.1), transport maritime sécurisé et assistance au dédouanement à l'arrivée (Radès, La Goulette, Bizerte ou Zarzis)."
+    keywords: ["déroulement", "étapes", "processus", "comment", "exportation"]
+
+  - id: "faq-fcr-conditions"
+    category: "fcr"
+    question: "Quelles sont les conditions pour bénéficier du FCR en Tunisie ?"
+    answer: "Le régime FCR est réservé aux Tunisiens résidant à l'étranger (TRE) justifiant d'au moins 2 ans de séjour à l'étranger sans dépasser 120 jours par an en Tunisie. Le véhicule de tourisme doit impérativement avoir 5 ans maximum."
+    keywords: ["fcr", "conditions", "tre", "douane", "âge", "5 ans"]
+
+  - id: "faq-delivery-time"
+    category: "shipping"
+    question: "Quels sont vos délais de livraison vers la Tunisie ?"
+    answer: "Le délai moyen est de 10 à 20 jours ouvrés entre la confirmation de votre commande, l'inspection technique, le départ du port européen et l'arrivée au port en Tunisie."
+    keywords: ["délai", "combien de temps", "livraison", "temps", "durée"]
+
+  - id: "faq-pricing-quote"
+    category: "pricing"
+    question: "Pouvez-vous me donner un prix exact tout compris ?"
+    answer: "Le coût total dépend précisément du modèle, du kilométrage, de l'année et du régime fiscal choisi (FCR RS ou dédouanement complet). Un conseiller commercial vous prépare un devis transparent dès confirmation de vos critères de recherche."
+    keywords: ["prix", "tarif", "devis", "combien", "coût"]
+
+  - id: "faq-fcr-documents"
+    category: "fcr"
+    question: "Quels documents sont requis pour le dossier FCR ?"
+    answer: "Les documents obligatoires comprennent la carte grise européenne originale, le certificat de conformité européen (CoC), la facture d'achat acquittée, la déclaration douanière d'export (EX-A) et votre carte consulaire avec passeport en cours de validité."
+    keywords: ["documents", "papiers", "dossier", "carte grise", "coc"]
+
+  - id: "faq-payment-safety"
+    category: "payment"
+    question: "Quels sont les modes de paiement acceptés ?"
+    answer: "Les paiements s'effectuent en toute sécurité par virement bancaire international (SEPA) directement sur le compte professionnel de notre société. Nous n'acceptons pas les paiements en cryptomonnaie ni les chèques non certifiés."
+    keywords: ["paiement", "virement", "payer", "sécurité", "bancaire"]

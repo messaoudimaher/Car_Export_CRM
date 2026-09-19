@@ -91,6 +91,17 @@ class Settings(BaseSettings):
         default="dev_embedding_key_placeholder", description="Embedding Provider API Key"
     )
 
+    # Owner Notification & CSV Export Configuration (Phase 6)
+    OWNER_NOTIFICATION_PHONE_E164: str | None = Field(
+        default=None, description="Company owner phone number for WhatsApp qualification alerts"
+    )
+    OWNER_NOTIFICATION_EMAIL: str | None = Field(
+        default=None, description="Company owner email for qualification alerts"
+    )
+    CSV_EXPORT_DIRECTORY: str = Field(
+        default="storage/exports", description="Filesystem directory for qualified lead CSV exports"
+    )
+
     @property
     def OPENAI_MODEL(self) -> str:
         """Alias for LLM_DEFAULT_MODEL for OpenAI adapter compatibility."""

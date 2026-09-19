@@ -1,0 +1,313 @@
+"""Autonomous AI WhatsApp Sales Agent Orchestrator (Phase 3 Autonomous Agent).
+
+Executes single-pass Gemini structured decision reasoning, validates output with Pydantic,
+enforces deterministic state machine transitions, and dispatches automatic WhatsApp responses.
+"""
+
+import json
+import re
+import time
+import uuid
+from typing import Any
+
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from sqlalchemy.orm.attributes import flag_modified
+
+from app.adapters.llm_gemini import GeminiAdapter
+from app.adapters.whatsapp_meta import MetaWhatsAppProvider
+from app.core.agent_state_machine import (
+    ConversationMode,
+    ConversationState,
+    HandoffReason,
+    compute_deterministic_state_transition,
+    is_explicit_confirmation,
+    is_explicit_rejection,
+)
+from app.core.config import settings
+from app.core.logging import logger
+from app.core.whatsapp_telemetry import WhatsAppTimingMetrics
+from app.models.conversation import WhatsAppConversation
+from app.models.message import Message
+from app.models.vehicle_request import VehicleRequest, VehicleRequestStatus, check_fcr_compliance
+from app.ports.llm import LLMCompletionRequest, LLMProvider
+from app.ports.whatsapp import WhatsAppProvider
+from app.schemas.agent_decision import AgentDecision
+from app.schemas.vehicle_request_state import validate_vehicle_criteria
+from app.services.company_knowledge import load_company_knowledge
+from app.services.conversation_memory import load_bounded_conversation_memory
+from app.services.csv_export_service import csv_export_service
+from app.services.owner_notifier import OwnerNotificationService
+
+
+class AgentOrchestrator:
+    """Coordinates autonomous AI customer conversations over WhatsApp."""
+
+    def __init__(
+        self,
+        db: AsyncSession,
+        llm_provider: LLMProvider | None = None,
+        whatsapp_provider: WhatsAppProvider | None = None,
+    ) -> None:
+        self.db = db
+        self.llm = llm_provider or GeminiAdapter(api_key=settings.GEMINI_API_KEY)
+        self.whatsapp = whatsapp_provider or MetaWhatsAppProvider(
+            app_secret=settings.META_WEBHOOK_APP_SECRET,
+            access_token=settings.META_WHATSAPP_ACCESS_TOKEN,
+            phone_number_id=settings.META_WHATSAPP_PHONE_NUMBER_ID,
+            api_version=settings.META_API_VERSION,
+        )
+        self.knowledge = load_company_knowledge()
+        self.owner_notifier = OwnerNotificationService(whatsapp_provider=self.whatsapp)
+
+    async def process_turn(
+        self,
+        tenant_id: uuid.UUID,
+        conversation_id: uuid.UUID,
+        customer_id: uuid.UUID,
+        message_id: uuid.UUID,
+        from_phone_e164: str,
+        text_body: str,
+        phone_number_id: str,
+        timing_metrics: WhatsAppTimingMetrics | None = None,
+    ) -> AgentDecision:
+        """Execute single-pass autonomous reasoning turn and dispatch automatic response."""
+        # 1. Load conversation state & verify AI authorization
+        stmt_conv = select(WhatsAppConversation).where(WhatsAppConversation.id == conversation_id)
+        conv_res = await self.db.execute(stmt_conv)
+        conversation = conv_res.scalar_one_or_none()
+
+        if not conversation:
+            raise ValueError(f"Conversation '{conversation_id}' not found.")
+
+        if conversation.mode == ConversationMode.HUMAN.value or conversation.conversation_state == ConversationState.HUMAN_ACTIVE.value:
+            logger.info(
+                "AGENT_TURN_SKIPPED_HUMAN_ACTIVE",
+                extra={"conversation_id": str(conversation_id)},
+            )
+            return AgentDecision(
+                intent="HUMAN_REQUEST",
+                response_text="Human representative active.",
+            )
+
+        # 2. Assemble bounded memory context & dynamic company knowledge
+        self.knowledge = load_company_knowledge()
+        memory = await load_bounded_conversation_memory(self.db, conversation_id, max_recent_messages=15)
+        knowledge_context = self.knowledge.to_grounded_context_prompt()
+        memory_context = memory.to_system_prompt_context()
+
+        # 3. Formulate unified single-pass system prompt
+        system_prompt = (
+            "You are the dedicated Autonomous AI Automotive Sales Agent for 'Auto Export Europe', "
+            "specializing in European vehicle sourcing and export to Tunisia.\n"
+            "Your objective is to conduct a natural, helpful, and highly competent sales conversation on WhatsApp.\n\n"
+            f"{memory_context}\n\n"
+            f"{knowledge_context}\n\n"
+            "CORE OPERATIONAL RULES:\n"
+            "1. MULTILINGUAL SUPPORT: Mirror the customer's language/dialect (French, Arabic, Tunisian Derja/Arabizi, English, German). Preserve technical vehicle terms.\n"
+            "2. ZERO FABRICATION OF COMPANY FACTS: You must NEVER invent company policies, guarantees, prices, or offices not stated in the verified knowledge base above.\n"
+            "3. NO BINDING COMMITMENTS: Never invent fixed vehicle prices or guarantee stock availability without confirmation.\n"
+            "4. UNAVAILABLE OR OUT-OF-SCOPE INFORMATION: If a customer asks for information or commitments not in the verified knowledge base (e.g., non-existent offices, fake 10-year warranties, crypto payments), politely state that a human advisor will verify and assist, and set human_attention_required=true.\n"
+            "5. VEHICLE SOURCING FLOW:\n"
+            "   - Extract all mentioned criteria (make, model, year, fuel, transmission, budget, port, color, options).\n"
+            "   - If required criteria are missing (Make, Model, Year, Budget), acknowledge what they said and naturally ask for the next missing field.\n"
+            "   - When all required criteria are present, present a clean structured summary and ask for their explicit confirmation.\n"
+            "   - If customer asks an FAQ during vehicle collection, answer the FAQ directly using approved knowledge and smoothly continue the collection.\n"
+            "6. HUMAN ESCALATION: If customer explicitly requests a human advisor, has an unsupported complex complaint, asks out-of-scope company policies, or demands binding price discounts, set human_attention_required=true.\n"
+            "7. DIRECT WHATSAPP OUTPUT: In 'response_text', provide ONLY the clean message to send to the customer on WhatsApp."
+        )
+
+        llm_request = LLMCompletionRequest(
+            messages=memory.chat_turns,
+            prompt=f"Customer message: '{text_body}'. Analyze intent, extract criteria, and formulate automatic WhatsApp response:",
+            system_prompt=system_prompt,
+            model=settings.GEMINI_MODEL,
+            temperature=0.2,
+            timeout_seconds=12.0,
+        )
+
+        start_llm = time.perf_counter()
+        try:
+            decision, llm_response = await self.llm.generate_structured_output(llm_request, AgentDecision)
+            llm_latency_ms = (time.perf_counter() - start_llm) * 1000.0
+            logger.info("GEMINI_AGENT_DECISION_SUCCESS", extra={"latency_ms": llm_latency_ms, "intent": decision.intent})
+        except Exception as llm_err:
+            llm_latency_ms = (time.perf_counter() - start_llm) * 1000.0
+            logger.error(f"Gemini API invocation failed ({llm_latency_ms:.1f}ms): {llm_err}", exc_info=True)
+            # Safe grounded fallback
+            decision = AgentDecision(
+                intent="OTHER",
+                language=memory.preferred_language or "fr",
+                response_text="Merci pour votre message ! Quelles sont les caractéristiques du véhicule que vous recherchez (marque, modèle, année ou budget) ?",
+                reasoning=f"Fallback triggered due to LLM error: {llm_err}",
+            )
+
+        # 4. Merge Extracted Vehicle Criteria into Active Draft
+        active_draft = dict(conversation.draft_data or {})
+        extracted_dict = decision.model_dump(
+            exclude={"response_text", "intent", "language", "reasoning", "confidence"}
+        )
+        for k, v in extracted_dict.items():
+            if v is not None and v != "":
+                active_draft[k] = v
+
+        validated_state = validate_vehicle_criteria(active_draft)
+        active_draft["missing_fields"] = validated_state.missing_fields
+        conversation.draft_data = dict(active_draft)
+        flag_modified(conversation, "draft_data")
+
+        # 5. Deterministic State Machine Transition
+        has_criteria = bool(active_draft.get("make") or active_draft.get("model"))
+        is_unsupported = self.knowledge.is_explicitly_unsupported(text_body) or (
+            decision.human_attention_required and decision.intent == "FAQ"
+        )
+        wants_human = any(
+            kw in text_body.lower() for kw in ["parler a un humain", "parler à un humain", "humain", "conseiller", "agent humain", "responsable", "telephone"]
+        ) or (decision.human_attention_required and not is_unsupported)
+        is_price_req = any(kw in text_body.lower() for kw in ["prix final", "devis officiel", "remise", "negocier"])
+
+        if is_unsupported and not decision.human_attention_required:
+            decision.human_attention_required = True
+
+        transition_res = compute_deterministic_state_transition(
+            current_state=conversation.conversation_state,
+            intent=decision.intent,
+            text_body=text_body,
+            has_vehicle_criteria=has_criteria,
+            missing_fields=validated_state.missing_fields,
+            customer_requested_human=wants_human,
+            is_price_commitment_request=is_price_req,
+            is_unsupported_question=is_unsupported,
+        )
+
+        conversation.conversation_state = transition_res.next_state.value
+        if transition_res.handoff_reason:
+            conversation.handoff_reason = transition_res.handoff_reason.value
+            conversation.handoff_summary = transition_res.summary_note
+
+        # 6. Synchronize & Persist Active VehicleRequest in PostgreSQL
+        if has_criteria or decision.intent in ("VEHICLE_REQUEST", "REQUEST_UPDATE"):
+            stmt_active_vreq = (
+                select(VehicleRequest)
+                .where(
+                    VehicleRequest.conversation_id == conversation_id,
+                    VehicleRequest.tenant_id == tenant_id,
+                    VehicleRequest.status.in_([
+                        VehicleRequestStatus.PENDING,
+                        VehicleRequestStatus.COLLECTING,
+                        VehicleRequestStatus.AWAITING_CONFIRMATION,
+                        VehicleRequestStatus.QUALIFIED,
+                    ]),
+                )
+                .order_by(VehicleRequest.created_at.desc())
+            )
+            vreq = (await self.db.execute(stmt_active_vreq)).scalar_one_or_none()
+            if not vreq:
+                vreq = VehicleRequest(
+                    tenant_id=tenant_id,
+                    customer_id=customer_id,
+                    conversation_id=conversation_id,
+                    make=str(active_draft.get("make") or "Unspecified"),
+                    model=str(active_draft.get("model") or "Unspecified"),
+                    status=VehicleRequestStatus.COLLECTING,
+                )
+                self.db.add(vreq)
+
+            # Update mutable specifications on the active request
+            if active_draft.get("make"):
+                vreq.make = str(active_draft["make"])
+            if active_draft.get("model"):
+                vreq.model = str(active_draft["model"])
+            if active_draft.get("year"):
+                vreq.min_year = int(active_draft["year"])
+                vreq.fcr_compatible = check_fcr_compliance(min_year=vreq.min_year)
+            if active_draft.get("fuel_type"):
+                vreq.fuel_type = str(active_draft["fuel_type"])
+            if active_draft.get("transmission"):
+                vreq.transmission = str(active_draft["transmission"])
+            if active_draft.get("budget_eur"):
+                vreq.budget_eur = float(active_draft["budget_eur"])
+            if active_draft.get("color"):
+                vreq.color = str(active_draft["color"])
+            if active_draft.get("max_mileage_km"):
+                vreq.max_mileage_km = int(active_draft["max_mileage_km"])
+            if active_draft.get("destination_port"):
+                vreq.destination_port = str(active_draft["destination_port"])
+            if active_draft.get("additional_requirements"):
+                vreq.additional_requirements = str(active_draft["additional_requirements"])
+
+            # Update status based on criteria completeness and explicit confirmation
+            if transition_res.should_qualify_request:
+                was_already_qualified = vreq.is_qualified
+                if not was_already_qualified:
+                    vreq.mark_as_qualified()
+                    # Automatically export to CSV and notify owner (exactly once)
+                    csv_export_service.export_qualified_request(
+                        request_id=vreq.id,
+                        tenant_id=tenant_id,
+                        customer_id=customer_id,
+                        customer_phone=from_phone_e164,
+                        customer_name=memory.customer_name,
+                        make=vreq.make,
+                        model=vreq.model,
+                        year=vreq.min_year,
+                        fuel_type=vreq.fuel_type,
+                        transmission=vreq.transmission,
+                        budget_eur=float(vreq.budget_eur) if vreq.budget_eur is not None else None,
+                        destination_port=vreq.destination_port,
+                        fcr_compatible=vreq.fcr_compatible,
+                        additional_requirements=vreq.additional_requirements,
+                        confirmed_at=vreq.confirmed_at,
+                    )
+                    await self.owner_notifier.notify_owner_of_qualified_request(
+                        tenant_name=self.knowledge.company.name,
+                        customer_phone=from_phone_e164,
+                        customer_name=memory.customer_name,
+                        make=vreq.make,
+                        model=vreq.model,
+                        year=vreq.min_year,
+                        fuel_type=vreq.fuel_type,
+                        transmission=vreq.transmission,
+                        budget_eur=float(vreq.budget_eur) if vreq.budget_eur is not None else None,
+                        destination_port=vreq.destination_port,
+                        fcr_compatible=vreq.fcr_compatible,
+                        additional_requirements=vreq.additional_requirements,
+                        confirmed_at=vreq.confirmed_at,
+                        phone_number_id=phone_number_id,
+                    )
+            elif validated_state.is_complete and vreq.status != VehicleRequestStatus.QUALIFIED:
+                vreq.status = VehicleRequestStatus.AWAITING_CONFIRMATION
+            elif vreq.status != VehicleRequestStatus.QUALIFIED:
+                vreq.status = VehicleRequestStatus.COLLECTING
+
+        # 7. Automatic Outbound Response Dispatch via WhatsApp
+        draft_reply = decision.response_text.strip()
+        if draft_reply:
+            if timing_metrics:
+                timing_metrics.mark_outbound_started()
+
+            target_phone_id = settings.META_WHATSAPP_PHONE_NUMBER_ID or phone_number_id
+            send_res = await self.whatsapp.send_text_message(
+                phone_number_id=target_phone_id,
+                recipient_e164=from_phone_e164,
+                text_body=draft_reply,
+            )
+
+            if timing_metrics:
+                timing_metrics.mark_outbound_completed()
+
+            # Record outbound timeline message
+            outbound_msg = Message(
+                tenant_id=tenant_id,
+                conversation_id=conversation_id,
+                direction="Outbound",
+                sender_type="AI_BOT",
+                content=draft_reply,
+                provider_message_id=send_res.wamid,
+                message_type="text",
+                delivery_status="Sent",
+            )
+            self.db.add(outbound_msg)
+
+        await self.db.commit()
+        return decision

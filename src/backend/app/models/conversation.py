@@ -1,4 +1,4 @@
-"""WhatsAppConversation Entity Model (WS-07, docs/database-design.md Section 5.4)."""
+"""WhatsAppConversation Entity Model (Phase 1 Domain Foundation)."""
 
 import uuid
 from datetime import UTC, datetime
@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from app.models.message import Message
     from app.models.tenant import Tenant
     from app.models.user import User
+    from app.models.vehicle_request import VehicleRequest
 
 
 class WhatsAppConversation(Base):
@@ -93,7 +94,7 @@ class WhatsAppConversation(Base):
         nullable=False,
         server_default="AI_ACTIVE",
         default="AI_ACTIVE",
-        comment="Autonomous state (AI_ACTIVE, WAITING_FOR_CUSTOMER, COLLECTING_REQUEST, AWAITING_REQUEST_CONFIRMATION, NEW_VEHICLE_REQUEST, HUMAN_ATTENTION, HUMAN_ACTIVE, CLOSED)",
+        comment="Autonomous state (AI_ACTIVE, WAITING_FOR_CUSTOMER, COLLECTING_REQUEST, AWAITING_REQUEST_CONFIRMATION, QUALIFIED_REQUEST, HUMAN_ATTENTION, HUMAN_ACTIVE, CLOSED)",
     )
 
     handoff_reason: Mapped[str | None] = mapped_column(
@@ -137,9 +138,16 @@ class WhatsAppConversation(Base):
         order_by="Message.created_at.asc()",
     )
 
+    vehicle_requests: Mapped[list["VehicleRequest"]] = relationship(
+        "VehicleRequest",
+        back_populates="conversation",
+    )
+
     def __init__(self, **kw: object) -> None:
         """Initialize WhatsAppConversation entity setting default values."""
         kw.setdefault("status", "PendingAgent")
         kw.setdefault("unread_count", 0)
+        kw.setdefault("mode", "AI")
+        kw.setdefault("conversation_state", "AI_ACTIVE")
         kw.setdefault("last_message_at", datetime.now(UTC))
         super().__init__(**kw)

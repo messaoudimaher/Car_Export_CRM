@@ -1,17 +1,18 @@
-"""VehicleRequest Entity Model (WS-08, BR-004, docs/database-design.md Section 5.7)."""
+"""VehicleRequest Entity Model (Phase 1 Domain Foundation)."""
 
 import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, Numeric, String, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
 
 if TYPE_CHECKING:
+    from app.models.conversation import WhatsAppConversation
     from app.models.customer import Customer
     from app.models.lead import Lead
     from app.models.tenant import Tenant
@@ -47,6 +48,18 @@ def check_fcr_compliance(
     return True
 
 
+class VehicleRequestStatus(str):
+    """Authoritative lifecycle status for vehicle requests."""
+
+    PENDING = "Pending"
+    COLLECTING = "Collecting"
+    AWAITING_CONFIRMATION = "AwaitingConfirmation"
+    QUALIFIED = "QUALIFIED"
+    SOURCING = "Sourcing"
+    FULFILLED = "Fulfilled"
+    CANCELLED = "Cancelled"
+
+
 class VehicleRequest(Base):
     """Declarative VehicleRequest model storing buyer vehicle sourcing specs & FCR compliance."""
 
@@ -54,6 +67,7 @@ class VehicleRequest(Base):
     __table_args__ = (
         Index("ix_vehicle_requests_tenant_id", "tenant_id"),
         Index("ix_vehicle_requests_customer_id", "customer_id"),
+        Index("ix_vehicle_requests_conversation_id", "conversation_id"),
         Index("ix_vehicle_requests_make_model", "make", "model"),
         Index("ix_vehicle_requests_created_at", "created_at"),
     )
@@ -70,6 +84,13 @@ class VehicleRequest(Base):
         ForeignKey("customers.id", ondelete="RESTRICT"),
         nullable=False,
         comment="Foreign key referencing buyer customer profile",
+    )
+
+    conversation_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("whatsapp_conversations.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="Foreign key referencing parent WhatsApp conversation thread",
     )
 
     make: Mapped[str] = mapped_column(
@@ -108,6 +129,12 @@ class VehicleRequest(Base):
         comment="Gearbox transmission type (Automatic, Manual)",
     )
 
+    color: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+        comment="Requested exterior/interior vehicle color",
+    )
+
     max_mileage_km: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
@@ -136,12 +163,18 @@ class VehicleRequest(Base):
         comment="Destination seaport in Tunisia (Rades, La Goulette, Bizerte)",
     )
 
+    additional_requirements: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Customer custom vehicle options, packages, or specific requirements",
+    )
+
     status: Mapped[str] = mapped_column(
-        String(20),
+        String(30),
         nullable=False,
         server_default="Pending",
         default="Pending",
-        comment="Vehicle request status (Pending, Sourcing, Quoted, Fulfilled, Cancelled)",
+        comment="Vehicle request status (Pending, Collecting, AwaitingConfirmation, QUALIFIED, Sourcing, Fulfilled, Cancelled)",
     )
 
     is_human_validated: Mapped[bool] = mapped_column(
@@ -162,7 +195,7 @@ class VehicleRequest(Base):
     confirmed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
-        comment="Timestamp when requirements were human validated",
+        comment="Timestamp when requirements were explicitly confirmed / validated",
     )
 
     # Relationships
@@ -176,6 +209,11 @@ class VehicleRequest(Base):
         back_populates="vehicle_requests",
     )
 
+    conversation: Mapped["WhatsAppConversation | None"] = relationship(
+        "WhatsAppConversation",
+        back_populates="vehicle_requests",
+    )
+
     confirmed_by_user: Mapped["User | None"] = relationship(
         "User",
     )
@@ -184,6 +222,17 @@ class VehicleRequest(Base):
         "Lead",
         back_populates="vehicle_request",
     )
+
+    @property
+    def is_qualified(self) -> bool:
+        """Return whether request is fully qualified and explicitly confirmed."""
+        return self.status == VehicleRequestStatus.QUALIFIED and self.confirmed_at is not None
+
+    def mark_as_qualified(self, confirmed_at: datetime | None = None) -> None:
+        """Transition request to QUALIFIED state upon explicit customer confirmation."""
+        self.status = VehicleRequestStatus.QUALIFIED
+        if self.confirmed_at is None:
+            self.confirmed_at = confirmed_at or datetime.now(UTC)
 
     def __init__(self, **kw: object) -> None:
         """Initialize VehicleRequest entity auto-calculating FCR age compliance (BR-004)."""

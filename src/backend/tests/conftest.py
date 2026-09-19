@@ -21,6 +21,14 @@ from app.models.tenant import Tenant
 from app.models.user import User, UserRole
 
 
+@pytest.fixture(autouse=True)
+async def dispose_engine_on_teardown() -> AsyncGenerator[None, None]:
+    """Dispose the engine connections after each test to prevent event loop connection leakage."""
+    yield
+    from app.core.database import async_engine
+    await async_engine.dispose()
+
+
 @pytest.fixture
 def app() -> FastAPI:
     """Return an instance of the FastAPI application."""
@@ -35,6 +43,14 @@ async def client(app: FastAPI) -> AsyncGenerator[AsyncClient, None]:
         base_url="http://testserver",
     ) as ac:
         yield ac
+
+
+@pytest.fixture
+async def db_session() -> AsyncGenerator[AsyncSession, None]:
+    """Provide an isolated database session for integration tests."""
+    from app.core.database import async_session_factory
+    async with async_session_factory() as session:
+        yield session
 
 
 @pytest.fixture
