@@ -40,21 +40,28 @@ class HandoffReason(str, Enum):
     BUSINESS_DECISION_REQUIRED = "BUSINESS_DECISION_REQUIRED"
 
 
+import re
+
 CONFIRMATION_KEYWORDS = {
-    "fr": {"oui", "correct", "d'accord", "exactement", "valider", "parfait", "c'est bon", "ok", "daccord", "confirme"},
-    "en": {"yes", "correct", "confirm", "exactly", "that's right", "right", "ok", "sure", "sounds good"},
+    "fr": {"oui", "correct", "d'accord", "exactement", "valider", "parfait", "c'est bon", "ok", "daccord", "confirme", "bon"},
+    "en": {"yes", "correct", "confirm", "exactly", "right", "ok", "sure", "sounds good"},
     "ar": {"نعم", "صحيح", "واضح", "موافق", "تأكيد", "باشا", "ايوة", "إيوه", "سليم"},
-    "derja": {"oui", "sahiheh", "ey", "eywah", "oumourha", "mfahem", "behi", "mriyah", "d'accord", "ok"},
+    "derja": {"oui", "sahiheh", "ey", "eywah", "oumourha", "mfahem", "behi", "mriyah", "d'accord", "ok", "tamam", "tmm"},
 }
 
 
 def is_explicit_confirmation(text: str) -> bool:
     """Check if customer response constitutes explicit confirmation of summarized requirements."""
     cleaned = text.strip().lower()
-    # Check for direct keyword matches or contains
+    if not cleaned:
+        return False
+
+    # Check for direct word presence
     for lang_set in CONFIRMATION_KEYWORDS.values():
         for kw in lang_set:
-            if kw == cleaned or cleaned.startswith(kw) or cleaned.endswith(kw):
+            # Word boundary regex search
+            pattern = r"(?:\b|^)" + re.escape(kw) + r"(?:\b|$)"
+            if re.search(pattern, cleaned, flags=re.IGNORECASE):
                 return True
     return False
 

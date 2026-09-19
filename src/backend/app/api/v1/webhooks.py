@@ -201,6 +201,9 @@ async def _process_ai_and_auto_reply(
             wants_human = any(h in lower_text for h in ["parler a un humain", "conseiller", "agent", "responsable", "telephone", "appeler"])
             is_price_commitment = any(p in lower_text for p in ["prix exact", "devis officiel", "prix final", "remise", "negocier"])
 
+            is_confirming = is_explicit_confirmation(text_body) or validated_extraction.intent in ("CONFIRMATION", "AFFIRMATIVE")
+            has_criteria = bool(accumulated_criteria.get("make") or accumulated_criteria.get("model"))
+
             # 5. Deterministic State Machine Transitions
             current_state = conversation.conversation_state or ConversationState.AI_ACTIVE.value
             target_state = current_state
@@ -213,10 +216,10 @@ async def _process_ai_and_auto_reply(
             elif is_price_commitment:
                 target_state = ConversationState.HUMAN_ATTENTION.value
                 handoff_reason = HandoffReason.PRICE_REQUEST.value
-            elif current_state == ConversationState.AWAITING_REQUEST_CONFIRMATION.value and is_explicit_confirmation(text_body):
+            elif is_confirming and (has_criteria or current_state in (ConversationState.AWAITING_REQUEST_CONFIRMATION.value, ConversationState.COLLECTING_REQUEST.value, ConversationState.AI_ACTIVE.value)):
                 target_state = ConversationState.NEW_VEHICLE_REQUEST.value
                 should_create_vehicle_request = True
-            elif validated_extraction.intent == "VEHICLE_REQUEST" or accumulated_criteria.get("make"):
+            elif validated_extraction.intent == "VEHICLE_REQUEST" or has_criteria:
                 if not validated_extraction.missing_fields:
                     target_state = ConversationState.AWAITING_REQUEST_CONFIRMATION.value
                 else:
@@ -296,72 +299,75 @@ async def _process_ai_and_auto_reply(
             db.add(understanding)
             await db.flush()
 
-            # 6. Generate multi-turn contextual WhatsApp response
-            if target_state == ConversationState.HUMAN_ATTENTION.value:
-                draft_reply = (
-                    "Je souhaite m'assurer de vous fournir l'information exacte et personnalisée. "
-                    "Un conseiller de notre équipe commerciale prend le relais immédiatement pour vous répondre !"
-                )
-            elif target_state == ConversationState.NEW_VEHICLE_REQUEST.value:
-                draft_reply = (
-                    "🎉 Parfait ! Votre demande de recherche véhicule a été validée et transmise "
-                    "directement à notre équipe commerciale. Un conseiller vous contactera rapidement !"
-                )
-            elif target_state == ConversationState.AWAITING_REQUEST_CONFIRMATION.value:
-                veh_make = accumulated_criteria.get("make", "")
-                veh_model = accumulated_criteria.get("model", "")
-                veh_year = f"{accumulated_criteria.get('year')}+" if accumulated_criteria.get("year") else ""
-                veh_fuel = accumulated_criteria.get("fuel_type", "")
-                veh_budget = f"{accumulated_criteria.get('budget_eur')} €" if accumulated_criteria.get("budget_eur") else ""
-                draft_reply = (
-                    f"J'ai bien noté votre demande :\n\n"
-                    f"🚗 Modèle: {veh_make} {veh_model}\n"
-                    f"📅 Année: {veh_year}\n"
-                    f"⛽ Carburant: {veh_fuel}\n"
-                    f"💰 Budget: {veh_budget}\n"
-                    f"🚢 Destination: Tunisie (Port de Radès)\n\n"
-                    f"Est-ce que tout est correct ?"
+            # 6. Generate multi-turn contextual WhatsApp response dynamically via Gemini AI
+            if is_first_turn:
+                stage_rule = (
+                    "CONVERSATION STAGE: INITIAL INCOMING MESSAGE (Turn #1).\n"
+                    "You may provide a warm, concise opening greeting (e.g. 'Salem khouya !' or 'Bonjour !') and welcome the customer."
                 )
             else:
-                if is_first_turn:
-                    stage_rule = (
-                        "CONVERSATION STAGE: INITIAL INCOMING MESSAGE (Turn #1).\n"
-                        "You may provide a warm, concise opening greeting (e.g. 'Salem khouya !' or 'Bonjour !') and welcome the customer."
-                    )
-                else:
-                    stage_rule = (
-                        f"CONVERSATION STAGE: ONGOING DIALOG (Turn #{turn_count}).\n"
-                        "CRITICAL ANTI-GREETING RULE: Greetings (Salem, Marhba, Bonjour, Ahla, Hello) were ALREADY EXCHANGED. "
-                        "DO NOT start with ANY greeting! Start reply DIRECTLY with answer or clarifying question."
-                    )
-
-                active_criteria_summary = {
-                    k: v for k, v in accumulated_criteria.items() if v is not None and v != ""
-                }
-
-                reply_system_prompt = (
-                    "You are the dedicated AI Automotive Export Advisor for a European Car Export CRM to Tunisia.\n"
-                    "Your mission is to hold a natural, coherent, multi-turn discussion on WhatsApp without human intervention.\n\n"
-                    f"{stage_rule}\n\n"
-                    f"APPROVED KNOWLEDGE BASE CONTEXT:\n{knowledge_context_str}\n\n"
-                    "CORE CONVERSATION & MEMORY RULES:\n"
-                    f"1. ACCUMULATED SEARCH CRITERIA: {json.dumps(active_criteria_summary, ensure_ascii=False)}\n"
-                    f"2. STILL MISSING CRITERIA: {validated_extraction.missing_fields}\n"
-                    "3. MULTI-TURN CONTINUITY: You MUST remember and build upon everything the customer previously mentioned. Never ask for information the customer has already given.\n"
-                    "4. LANGUAGE & TONE: Mirror the customer's language/dialect (Tunisian Derja, French, Arabic, English). Keep answers concise, formatted for WhatsApp.\n"
-                    "5. GROUNDED FAQ: Use the approved knowledge base context for FAQ questions. Do not invent prices or guarantees.\n"
-                    "6. DIRECT OUTPUT ONLY: Return ONLY the exact text to send to the customer on WhatsApp."
+                stage_rule = (
+                    f"CONVERSATION STAGE: ONGOING DIALOG (Turn #{turn_count}).\n"
+                    "CRITICAL ANTI-GREETING RULE: Greetings (Salem, Marhba, Bonjour, Ahla, Hello) were ALREADY EXCHANGED. "
+                    "DO NOT start with ANY greeting! Start reply DIRECTLY with answer or clarifying question."
                 )
 
-                reply_req = LLMCompletionRequest(
-                    messages=chat_turns,
-                    prompt="Respond to the customer message adhering strictly to stage, memory, and grounded knowledge rules:",
-                    system_prompt=reply_system_prompt,
-                    model=settings.GEMINI_MODEL,
-                    temperature=0.3,
+            if target_state == ConversationState.HUMAN_ATTENTION.value:
+                state_instruction = (
+                    "STAGE: HUMAN HANDOFF REQUIRED.\n"
+                    "State politely in 1-2 sentences in the customer's language/dialect that a dedicated sales representative is taking over immediately to assist them."
                 )
-                reply_res = await llm.generate_text(reply_req)
-                draft_reply = reply_res.content.strip()
+            elif target_state == ConversationState.NEW_VEHICLE_REQUEST.value:
+                state_instruction = (
+                    f"STAGE: REQUEST CONFIRMED BY CUSTOMER ({json.dumps(accumulated_criteria, ensure_ascii=False)}).\n"
+                    "Thank the customer warmly and confirm in 1-2 sentences that their vehicle search request has been validated and registered in our CRM system, and that our sales team will contact them shortly with matching European vehicles."
+                )
+            elif target_state == ConversationState.AWAITING_REQUEST_CONFIRMATION.value:
+                state_instruction = (
+                    f"STAGE: ALL VEHICLE REQUIREMENTS COLLECTED ({json.dumps(accumulated_criteria, ensure_ascii=False)}).\n"
+                    "First, answer any question the customer asked in their message using the Knowledge Base. "
+                    "Then, summarize their collected vehicle criteria clearly (Make, Model, Year, Fuel, Budget, Port) and ask them naturally if everything is correct to validate their request."
+                )
+            elif target_state == ConversationState.COLLECTING_REQUEST.value:
+                state_instruction = (
+                    f"STAGE: COLLECTING VEHICLE CRITERIA (Collected: {json.dumps(accumulated_criteria, ensure_ascii=False)}, Missing: {validated_extraction.missing_fields}).\n"
+                    "First, answer any specific question the customer asked using the Knowledge Base context. "
+                    "Then, acknowledge what they mentioned and ask naturally for the remaining missing vehicle criteria."
+                )
+            else:
+                state_instruction = (
+                    "STAGE: GENERAL DIALOG / FAQ INQUIRY.\n"
+                    "Answer the customer's message accurately, professionally, and conversationally using the approved Knowledge Base context."
+                )
+
+            active_criteria_summary = {
+                k: v for k, v in accumulated_criteria.items() if v is not None and v != ""
+            }
+
+            reply_system_prompt = (
+                "You are the dedicated AI Automotive Export Advisor for a European Car Export CRM to Tunisia.\n"
+                "Your mission is to hold a natural, confident, highly coherent discussion on WhatsApp without human intervention.\n\n"
+                f"{stage_rule}\n\n"
+                f"CURRENT STAGE DIRECTIVE:\n{state_instruction}\n\n"
+                f"APPROVED KNOWLEDGE BASE CONTEXT:\n{knowledge_context_str}\n\n"
+                "CORE CONVERSATION & MEMORY RULES:\n"
+                f"1. ACCUMULATED SEARCH CRITERIA: {json.dumps(active_criteria_summary, ensure_ascii=False)}\n"
+                f"2. STILL MISSING CRITERIA: {validated_extraction.missing_fields}\n"
+                "3. MULTI-TURN CONTINUITY: You MUST remember everything the customer previously mentioned. Never ask for information already provided.\n"
+                "4. LANGUAGE & TONE: Mirror the customer's language/dialect (Tunisian Derja, French, Arabic, English). Be confident, concise, and helpful (formatted for WhatsApp).\n"
+                "5. GROUNDED FAQ: Use the approved knowledge base context for FAQ questions. Do not invent prices or guarantees.\n"
+                "6. DIRECT OUTPUT ONLY: Return ONLY the exact text to send to the customer on WhatsApp."
+            )
+
+            reply_req = LLMCompletionRequest(
+                messages=chat_turns,
+                prompt="Respond to the customer message adhering strictly to stage directive, memory, and grounded knowledge rules:",
+                system_prompt=reply_system_prompt,
+                model=settings.GEMINI_MODEL,
+                temperature=0.3,
+            )
+            reply_res = await llm.generate_text(reply_req)
+            draft_reply = reply_res.content.strip()
 
             # 7. Anti-Greeting Safety Net for subsequent turns
             if not is_first_turn and draft_reply and target_state == ConversationState.COLLECTING_REQUEST.value:
