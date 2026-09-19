@@ -49,6 +49,11 @@ class VehicleRequestResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+    # Enriched presentation fields
+    customer_name: str | None = None
+    customer_phone_e164: str | None = None
+    conversation_id: str | None = None
+
     model_config = ConfigDict(from_attributes=True)
 
 

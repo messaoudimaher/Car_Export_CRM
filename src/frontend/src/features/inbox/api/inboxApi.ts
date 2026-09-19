@@ -203,6 +203,11 @@ export function useThreads(filter?: InboxFilter) {
             customerPhone: c.customer_phone_e164 || c.customerPhone || "+216 -- --- ---",
             channel: "WHATSAPP",
             status: c.status || "UNASSIGNED",
+            mode: c.mode || "AI",
+            conversationState: c.conversation_state || c.conversationState || "AI_ACTIVE",
+            handoffReason: c.handoff_reason,
+            handoffSummary: c.handoff_summary,
+            draftData: c.draft_data,
             unreadCount: c.unread_count || 0,
             lastMessageSnippet: c.last_message_content || c.lastMessageSnippet || "Message reçu",
             lastActivityAt: c.last_message_at || c.lastActivityAt || new Date().toISOString(),
@@ -243,7 +248,7 @@ export function useThreadMessages(threadId?: string) {
           id: m.id,
           threadId: m.conversation_id || threadId,
           direction: m.direction?.toUpperCase() === "OUTBOUND" ? "OUTBOUND" : "INBOUND",
-          senderName: m.sender_type === "Customer" ? "Client" : "Conseiller Commercial",
+          senderName: m.sender_type === "Customer" ? "Client" : (m.sender_type === "AI_Bot" ? "🤖 Agent IA" : "Conseiller Commercial"),
           content: m.content || "",
           status: m.delivery_status || "DELIVERED",
           timestamp: m.created_at || new Date().toISOString(),
@@ -280,6 +285,32 @@ export function useSendMessage() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: inboxKeys.messages(variables.threadId) });
+      queryClient.invalidateQueries({ queryKey: inboxKeys.all });
+    },
+  });
+}
+
+export function useTakeoverConversation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (threadId: string) => {
+      const res = await apiClient.post<any>(`/conversations/${threadId}/takeover`);
+      return res.data?.data || res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: inboxKeys.all });
+    },
+  });
+}
+
+export function useResumeAiConversation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (threadId: string) => {
+      const res = await apiClient.post<any>(`/conversations/${threadId}/resume-ai`);
+      return res.data?.data || res.data;
+    },
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: inboxKeys.all });
     },
   });

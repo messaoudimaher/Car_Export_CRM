@@ -24,6 +24,11 @@ class ConversationResponse(BaseModel):
     customer_id: UUID
     assigned_agent_id: UUID | None = None
     status: str
+    mode: str | None = "AI"
+    conversation_state: str | None = "AI_ACTIVE"
+    handoff_reason: str | None = None
+    handoff_summary: str | None = None
+    draft_data: dict[str, Any] | None = None
     last_message_at: datetime
     unread_count: int
     created_at: datetime

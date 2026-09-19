@@ -94,7 +94,25 @@ async def list_vehicle_requests(
     if has_next and items:
         next_cursor = encode_cursor(items[-1].created_at, items[-1].id)
 
-    data = [VehicleRequestResponse.model_validate(v) for v in items]
+    data: list[VehicleRequestResponse] = []
+    for v in items:
+        resp = VehicleRequestResponse.model_validate(v)
+        cust = await session.get(Customer, v.customer_id)
+        if cust:
+            resp.customer_name = cust.full_name
+            resp.customer_phone_e164 = cust.phone_e164
+
+        from app.models.conversation import WhatsAppConversation
+        conv_stmt = select(WhatsAppConversation.id).where(
+            WhatsAppConversation.customer_id == v.customer_id,
+            WhatsAppConversation.tenant_id == tenant_id,
+        )
+        conv_id = (await session.execute(conv_stmt)).scalar_one_or_none()
+        if conv_id:
+            resp.conversation_id = str(conv_id)
+
+        data.append(resp)
+
     meta = VehicleRequestListMeta(
         limit=limit,
         has_next=has_next,

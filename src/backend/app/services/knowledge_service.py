@@ -272,3 +272,41 @@ class KnowledgeService:
             "document_name": document_name,
             "deleted_count": deleted_count,
         }
+
+    async def search_relevant_chunks(
+        self,
+        tenant_id: uuid.UUID,
+        query: str,
+        top_k: int = 3,
+    ) -> list[str]:
+        """Retrieve relevant knowledge chunks for grounding FAQ responses (SEC-007)."""
+        if not tenant_id:
+            return []
+
+        cleaned_query = query.strip()
+        if not cleaned_query:
+            return []
+
+        # 1. Text ILIKE keyword search fallback across tenant chunks
+        terms = [t.lower() for t in cleaned_query.split() if len(t) > 2]
+        stmt = (
+            select(KnowledgeEmbedding.chunk_content)
+            .where(KnowledgeEmbedding.tenant_id == tenant_id)
+            .limit(10)
+        )
+        result = await self.session.execute(stmt)
+        all_chunks = list(result.scalars().all())
+
+        if not all_chunks:
+            return []
+
+        # Score chunks by term match density
+        scored_chunks: list[tuple[int, str]] = []
+        for chunk in all_chunks:
+            score = sum(1 for term in terms if term in chunk.lower())
+            scored_chunks.append((score, chunk))
+
+        scored_chunks.sort(key=lambda x: x[0], reverse=True)
+        relevant = [chunk for score, chunk in scored_chunks[:top_k] if score > 0]
+        return relevant if relevant else all_chunks[:top_k]
+

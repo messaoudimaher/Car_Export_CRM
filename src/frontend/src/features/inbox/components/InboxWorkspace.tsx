@@ -3,7 +3,7 @@ import { ThreadList } from "./ThreadList";
 import { ChatHistory } from "./ChatHistory";
 import { CustomerSidebar } from "./CustomerSidebar";
 import { QuotationBuilder } from "../../quotes/components/QuotationBuilder";
-import { useThreads, useThreadMessages, useSendMessage } from "../api/inboxApi";
+import { useThreads, useThreadMessages, useSendMessage, useTakeoverConversation, useResumeAiConversation } from "../api/inboxApi";
 import { InboxFilter, ConversationThread } from "../types";
 
 export const InboxWorkspace: React.FC = () => {
@@ -27,10 +27,22 @@ export const InboxWorkspace: React.FC = () => {
 
   const { data: messages = [], isLoading: isLoadingMessages } = useThreadMessages(activeThread?.id);
   const sendMessageMutation = useSendMessage();
+  const takeoverMutation = useTakeoverConversation();
+  const resumeAiMutation = useResumeAiConversation();
 
   const handleSendMessage = async (content: string) => {
     if (!activeThread) return;
     await sendMessageMutation.mutateAsync({ threadId: activeThread.id, content });
+  };
+
+  const handleTakeover = async () => {
+    if (!activeThread) return;
+    await takeoverMutation.mutateAsync(activeThread.id);
+  };
+
+  const handleResumeAi = async () => {
+    if (!activeThread) return;
+    await resumeAiMutation.mutateAsync(activeThread.id);
   };
 
   const handleSendQuoteToChat = async (_pdfUrl: string, summaryText: string) => {
@@ -124,6 +136,9 @@ export const InboxWorkspace: React.FC = () => {
         <CustomerSidebar
           customer={activeThread?.customer}
           lead={activeThread?.lead}
+          mode={activeThread?.mode}
+          onTakeover={handleTakeover}
+          onResumeAi={handleResumeAi}
           onOpenQuoteBuilder={() => setIsQuoteBuilderOpen(true)}
         />
       </div>

@@ -105,7 +105,19 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-[11px] text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded flex items-center gap-1 font-mono">
+          {thread.mode === "HUMAN" ? (
+            <span className="text-[11px] text-amber-300 bg-amber-950/80 border border-amber-700/80 px-2.5 py-1 rounded-md flex items-center gap-1.5 font-medium shadow-sm">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+              👤 Mode Humain Actif
+            </span>
+          ) : (
+            <span className="text-[11px] text-emerald-300 bg-emerald-950/80 border border-emerald-700/80 px-2.5 py-1 rounded-md flex items-center gap-1.5 font-medium shadow-sm">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              🤖 Agent IA Actif
+            </span>
+          )}
+
+          <span className="text-[11px] text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded flex items-center gap-1 font-mono hidden sm:flex">
             <ShieldCheck className="w-3 h-3" />
             WhatsApp Official API
           </span>

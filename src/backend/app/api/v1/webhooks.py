@@ -42,7 +42,7 @@ async def verify_webhook_challenge(
     """Handle Meta WhatsApp webhook verification challenge GET request."""
     if hub_mode == "subscribe" and (
         hub_verify_token == settings.META_WEBHOOK_VERIFY_TOKEN
-        or settings.ENVIRONMENT in ("development", "test")
+        or (settings.ENVIRONMENT in ("development", "test") and hub_verify_token and hub_verify_token.startswith("dev_"))
     ):
         logger.info(
             "WhatsApp webhook challenge verification succeeded",
@@ -75,11 +75,20 @@ async def _process_ai_and_auto_reply(
     from app.adapters.llm_gemini import GeminiAdapter
     from app.adapters.whatsapp_meta import MetaWhatsAppProvider
     from app.core.agent_policy import load_agent_policy
+    from app.core.agent_state_machine import (
+        ConversationMode,
+        ConversationState,
+        HandoffReason,
+        can_ai_respond,
+        is_explicit_confirmation,
+    )
     from app.core.database import async_session_factory
     from app.core.ws_manager import ws_manager
     from app.models.ai_suggestion import AISuggestion, AISuggestionStatus
     from app.models.ai_understanding import AIUnderstanding, AIUnderstandingStatus
+    from app.models.conversation import WhatsAppConversation
     from app.models.message import Message
+    from app.models.vehicle_request import VehicleRequest
     from app.ports.llm import LLMCompletionRequest
     from app.schemas.vehicle_request_extraction import (
         VehicleRequestExtraction,
@@ -91,9 +100,28 @@ async def _process_ai_and_auto_reply(
         MessageDirection,
         MessageSenderType,
     )
+    from app.services.knowledge_service import KnowledgeService
 
     async with async_session_factory() as db:
         try:
+            # 0. Mode & State Guard Check
+            conv_stmt = select(WhatsAppConversation).where(WhatsAppConversation.id == conversation_id)
+            conversation = (await db.execute(conv_stmt)).scalar_one_or_none()
+            if not conversation:
+                logger.error(f"Conversation '{conversation_id}' not found in background worker.")
+                return
+
+            if not can_ai_respond(conversation.mode, conversation.conversation_state):
+                logger.info(
+                    "AI_AUTO_REPLY_SKIPPED_HUMAN_ACTIVE",
+                    extra={
+                        "conversation_id": str(conversation_id),
+                        "mode": conversation.mode,
+                        "state": conversation.conversation_state,
+                    },
+                )
+                return
+
             # 1. Fetch entire conversation timeline for this thread in chronological order
             stmt_msgs = (
                 select(Message)
@@ -122,7 +150,8 @@ async def _process_ai_and_auto_reply(
 
             is_first_turn = not has_previous_outbound and turn_count <= 1
 
-            # 2. Retrieve previous vehicle understandings to accumulate search criteria across turns
+            # 2. Retrieve level 3 active request draft state from conversation or understandings
+            accumulated_criteria: dict[str, Any] = conversation.draft_data or {}
             stmt_prev_und = (
                 select(AIUnderstanding)
                 .where(AIUnderstanding.conversation_id == conversation_id)
@@ -130,21 +159,27 @@ async def _process_ai_and_auto_reply(
                 .limit(10)
             )
             prev_understandings = list((await db.execute(stmt_prev_und)).scalars().all())
-            accumulated_criteria: dict[str, Any] = {}
             for u in reversed(prev_understandings):
                 if u.extracted_data_jsonb and isinstance(u.extracted_data_jsonb, dict):
                     for k, v in u.extracted_data_jsonb.items():
                         if v is not None and v != "" and k != "missing_fields":
                             accumulated_criteria[k] = v
 
-            # 3. Contextual extraction with Gemini using full multi-turn conversation
+            # 3. Grounding FAQ Knowledge Retrieval
+            knowledge_service = KnowledgeService(db)
+            grounded_chunks = await knowledge_service.search_relevant_chunks(
+                tenant_id=tenant_id, query=text_body, top_k=3
+            )
+            knowledge_context_str = "\n---\n".join(grounded_chunks) if grounded_chunks else "No specific knowledge document matched."
+
+            # 4. Contextual extraction with Gemini using full multi-turn conversation
             llm = GeminiAdapter(api_key=settings.GEMINI_API_KEY)
             req = LLMCompletionRequest(
                 messages=chat_turns,
-                prompt="Extract all cumulative vehicle sourcing criteria from the conversation history and latest message.",
+                prompt="Extract all cumulative vehicle sourcing criteria, customer intent, confidence score, and human handoff request status.",
                 system_prompt=(
                     "You are an expert automotive export analyst. Extract vehicle make, model, "
-                    "year, budget_eur, fuel_type, fcr_eligible, and intent based on the entire conversation context."
+                    "year, budget_eur, fuel_type, transmission, max_mileage_km, fcr_eligible, and intent based on context."
                 ),
                 model=settings.GEMINI_MODEL,
             )
@@ -152,13 +187,85 @@ async def _process_ai_and_auto_reply(
                 req, VehicleRequestExtraction
             )
 
-            # Merge new extraction into accumulated criteria
+            # Merge new extraction into accumulated criteria without overwriting valid data with empty values
             for k, v in extracted_obj.model_dump().items():
-                if v is not None and v != "" and k != "missing_fields":
+                if v is not None and v != "" and k not in ("missing_fields", "intent", "language"):
                     accumulated_criteria[k] = v
 
             validated_extraction = validate_vehicle_request(accumulated_criteria)
             accumulated_criteria["missing_fields"] = validated_extraction.missing_fields
+            conversation.draft_data = accumulated_criteria
+
+            # Check explicit human request or low confidence / price quote trigger
+            lower_text = text_body.lower()
+            wants_human = any(h in lower_text for h in ["parler a un humain", "conseiller", "agent", "responsable", "telephone", "appeler"])
+            is_price_commitment = any(p in lower_text for p in ["prix exact", "devis officiel", "prix final", "remise", "negocier"])
+
+            # 5. Deterministic State Machine Transitions
+            current_state = conversation.conversation_state or ConversationState.AI_ACTIVE.value
+            target_state = current_state
+            handoff_reason = None
+            should_create_vehicle_request = False
+
+            if wants_human:
+                target_state = ConversationState.HUMAN_ATTENTION.value
+                handoff_reason = HandoffReason.CUSTOMER_REQUESTED_HUMAN.value
+            elif is_price_commitment:
+                target_state = ConversationState.HUMAN_ATTENTION.value
+                handoff_reason = HandoffReason.PRICE_REQUEST.value
+            elif current_state == ConversationState.AWAITING_REQUEST_CONFIRMATION.value and is_explicit_confirmation(text_body):
+                target_state = ConversationState.NEW_VEHICLE_REQUEST.value
+                should_create_vehicle_request = True
+            elif validated_extraction.intent == "VEHICLE_REQUEST" or accumulated_criteria.get("make"):
+                if not validated_extraction.missing_fields:
+                    target_state = ConversationState.AWAITING_REQUEST_CONFIRMATION.value
+                else:
+                    target_state = ConversationState.COLLECTING_REQUEST.value
+            elif validated_extraction.intent == "FAQ":
+                target_state = ConversationState.AI_ACTIVE.value
+
+            conversation.conversation_state = target_state
+            if handoff_reason:
+                conversation.handoff_reason = handoff_reason
+                conversation.handoff_summary = f"Client message: '{text_body}'. Handoff trigger: {handoff_reason}"
+
+            # Create CRM VehicleRequest on customer confirmation
+            if should_create_vehicle_request:
+                existing_vreq_stmt = select(VehicleRequest).where(
+                    VehicleRequest.customer_id == customer_id,
+                    VehicleRequest.tenant_id == tenant_id,
+                    VehicleRequest.make == str(accumulated_criteria.get("make") or "Non spécifié"),
+                    VehicleRequest.model == str(accumulated_criteria.get("model") or "Non spécifié"),
+                )
+                existing_vreq = (await db.execute(existing_vreq_stmt)).scalar_one_or_none()
+                if not existing_vreq:
+                    new_vreq = VehicleRequest(
+                        tenant_id=tenant_id,
+                        customer_id=customer_id,
+                        make=str(accumulated_criteria.get("make") or "Volkswagen"),
+                        model=str(accumulated_criteria.get("model") or "Golf"),
+                        min_year=int(accumulated_criteria["year"]) if accumulated_criteria.get("year") else 2021,
+                        max_year=int(accumulated_criteria["year"]) if accumulated_criteria.get("year") else None,
+                        fuel_type=str(accumulated_criteria.get("fuel_type") or "Diesel"),
+                        transmission=str(accumulated_criteria.get("transmission") or "Automatic"),
+                        budget_eur=float(accumulated_criteria["budget_eur"]) if accumulated_criteria.get("budget_eur") else 25000.0,
+                        destination_port="Rades",
+                        status="Pending",
+                        is_human_validated=False,
+                    )
+                    db.add(new_vreq)
+                    await db.flush()
+
+                await ws_manager.broadcast_to_tenant(
+                    tenant_id=tenant_id,
+                    event_type="NEW_VEHICLE_REQUEST_CREATED",
+                    data={
+                        "conversation_id": str(conversation_id),
+                        "customer_id": str(customer_id),
+                        "make": accumulated_criteria.get("make"),
+                        "model": accumulated_criteria.get("model"),
+                    },
+                )
 
             # Generate summary for CRM dashboard
             summary_parts = []
@@ -184,55 +291,80 @@ async def _process_ai_and_auto_reply(
                 detected_language=validated_extraction.language or "fr",
                 summary_fr=summary_fr,
                 model_name=settings.GEMINI_MODEL,
-                prompt_version="v2.0",
+                prompt_version="v2.5",
             )
             db.add(understanding)
             await db.flush()
 
-            # 4. Generate multi-turn contextual WhatsApp response with Gemini
-            if is_first_turn:
-                stage_rule = (
-                    "CONVERSATION STAGE: INITIAL INCOMING MESSAGE (Turn #1).\n"
-                    "You may provide a warm, concise opening greeting (e.g. 'Salem khouya !' or 'Bonjour !') and welcome the customer to our European car export service."
+            # 6. Generate multi-turn contextual WhatsApp response
+            if target_state == ConversationState.HUMAN_ATTENTION.value:
+                draft_reply = (
+                    "Je souhaite m'assurer de vous fournir l'information exacte et personnalisée. "
+                    "Un conseiller de notre équipe commerciale prend le relais immédiatement pour vous répondre !"
+                )
+            elif target_state == ConversationState.NEW_VEHICLE_REQUEST.value:
+                draft_reply = (
+                    "🎉 Parfait ! Votre demande de recherche véhicule a été validée et transmise "
+                    "directement à notre équipe commerciale. Un conseiller vous contactera rapidement !"
+                )
+            elif target_state == ConversationState.AWAITING_REQUEST_CONFIRMATION.value:
+                veh_make = accumulated_criteria.get("make", "")
+                veh_model = accumulated_criteria.get("model", "")
+                veh_year = f"{accumulated_criteria.get('year')}+" if accumulated_criteria.get("year") else ""
+                veh_fuel = accumulated_criteria.get("fuel_type", "")
+                veh_budget = f"{accumulated_criteria.get('budget_eur')} €" if accumulated_criteria.get("budget_eur") else ""
+                draft_reply = (
+                    f"J'ai bien noté votre demande :\n\n"
+                    f"🚗 Modèle: {veh_make} {veh_model}\n"
+                    f"📅 Année: {veh_year}\n"
+                    f"⛽ Carburant: {veh_fuel}\n"
+                    f"💰 Budget: {veh_budget}\n"
+                    f"🚢 Destination: Tunisie (Port de Radès)\n\n"
+                    f"Est-ce que tout est correct ?"
                 )
             else:
-                stage_rule = (
-                    f"CONVERSATION STAGE: ONGOING DIALOG (Turn #{turn_count}).\n"
-                    "CRITICAL ANTI-GREETING RULE: Greetings (Salem, Marhba, Bonjour, Bonsoir, Ahla, Hi, Hello, etc.) were ALREADY EXCHANGED earlier in this discussion. "
-                    "DO NOT start with ANY greeting, welcoming phrase, or pleasantry! "
-                    "DO NOT say 'Salem', 'Bonjour', 'Marhba', 'Bienvenue', or 'Ahla'. "
-                    "Start your reply DIRECTLY with the substantive answer, vehicle details, quotation options, or the next clarifying question."
+                if is_first_turn:
+                    stage_rule = (
+                        "CONVERSATION STAGE: INITIAL INCOMING MESSAGE (Turn #1).\n"
+                        "You may provide a warm, concise opening greeting (e.g. 'Salem khouya !' or 'Bonjour !') and welcome the customer."
+                    )
+                else:
+                    stage_rule = (
+                        f"CONVERSATION STAGE: ONGOING DIALOG (Turn #{turn_count}).\n"
+                        "CRITICAL ANTI-GREETING RULE: Greetings (Salem, Marhba, Bonjour, Ahla, Hello) were ALREADY EXCHANGED. "
+                        "DO NOT start with ANY greeting! Start reply DIRECTLY with answer or clarifying question."
+                    )
+
+                active_criteria_summary = {
+                    k: v for k, v in accumulated_criteria.items() if v is not None and v != ""
+                }
+
+                reply_system_prompt = (
+                    "You are the dedicated AI Automotive Export Advisor for a European Car Export CRM to Tunisia.\n"
+                    "Your mission is to hold a natural, coherent, multi-turn discussion on WhatsApp without human intervention.\n\n"
+                    f"{stage_rule}\n\n"
+                    f"APPROVED KNOWLEDGE BASE CONTEXT:\n{knowledge_context_str}\n\n"
+                    "CORE CONVERSATION & MEMORY RULES:\n"
+                    f"1. ACCUMULATED SEARCH CRITERIA: {json.dumps(active_criteria_summary, ensure_ascii=False)}\n"
+                    f"2. STILL MISSING CRITERIA: {validated_extraction.missing_fields}\n"
+                    "3. MULTI-TURN CONTINUITY: You MUST remember and build upon everything the customer previously mentioned. Never ask for information the customer has already given.\n"
+                    "4. LANGUAGE & TONE: Mirror the customer's language/dialect (Tunisian Derja, French, Arabic, English). Keep answers concise, formatted for WhatsApp.\n"
+                    "5. GROUNDED FAQ: Use the approved knowledge base context for FAQ questions. Do not invent prices or guarantees.\n"
+                    "6. DIRECT OUTPUT ONLY: Return ONLY the exact text to send to the customer on WhatsApp."
                 )
 
-            active_criteria_summary = {
-                k: v for k, v in accumulated_criteria.items() if v is not None and v != ""
-            }
+                reply_req = LLMCompletionRequest(
+                    messages=chat_turns,
+                    prompt="Respond to the customer message adhering strictly to stage, memory, and grounded knowledge rules:",
+                    system_prompt=reply_system_prompt,
+                    model=settings.GEMINI_MODEL,
+                    temperature=0.3,
+                )
+                reply_res = await llm.generate_text(reply_req)
+                draft_reply = reply_res.content.strip()
 
-            reply_system_prompt = (
-                "You are the dedicated AI Automotive Export Advisor for a European Car Export CRM to Tunisia.\n"
-                "Your mission is to hold a natural, coherent, multi-turn discussion on WhatsApp without human intervention.\n\n"
-                f"{stage_rule}\n\n"
-                "CORE CONVERSATION & MEMORY RULES:\n"
-                f"1. ACCUMULATED SEARCH CRITERIA: {json.dumps(active_criteria_summary, ensure_ascii=False)}\n"
-                f"2. STILL MISSING CRITERIA: {validated_extraction.missing_fields}\n"
-                "3. MULTI-TURN CONTINUITY: You MUST remember and build upon everything the customer previously mentioned (make, model, year, budget, options, FCR). Never ask for information the customer has already given.\n"
-                "4. LANGUAGE & TONE: Mirror the customer's language and dialect (Tunisian Derja, French, Arabic, or English). Keep answers concise, helpful, and formatted for WhatsApp (short paragraphs, clean bullet points, subtle emojis).\n"
-                "5. DOMAIN EXPERTISE: Sourcing European stock (Germany, France, Italy) Netto (VAT excluded), Ro-Ro shipping to Port of Rades / La Goulette (7-14 days), FCR customs clearance & tax exemptions, vehicle technical inspection (TÜV/Dekra).\n"
-                "6. DIRECT OUTPUT ONLY: Return ONLY the exact text to send to the customer on WhatsApp. No markdown code blocks, thoughts, or meta explanations."
-            )
-
-            reply_req = LLMCompletionRequest(
-                messages=chat_turns,
-                prompt="Respond to the customer message above adhering strictly to the stage and domain rules:",
-                system_prompt=reply_system_prompt,
-                model=settings.GEMINI_MODEL,
-                temperature=0.3,
-            )
-            reply_res = await llm.generate_text(reply_req)
-            draft_reply = reply_res.content.strip()
-
-            # 5. Anti-Greeting Safety Net for subsequent turns
-            if not is_first_turn and draft_reply:
+            # 7. Anti-Greeting Safety Net for subsequent turns
+            if not is_first_turn and draft_reply and target_state == ConversationState.COLLECTING_REQUEST.value:
                 greeting_regex = (
                     r"^(?:salem(?:\s+(?:alikoum|3likom|khouya|si\s+\w+))?|"
                     r"salam(?:\s+(?:alaykoum|3laykom|khouya))?|"
@@ -246,15 +378,6 @@ async def _process_ai_and_auto_reply(
                 cleaned = re.sub(greeting_regex, "", draft_reply, flags=re.IGNORECASE).strip()
                 if cleaned:
                     draft_reply = cleaned[0].upper() + cleaned[1:] if len(cleaned) > 1 else cleaned
-
-            if not draft_reply:
-                if accumulated_criteria.get("make") or accumulated_criteria.get("model"):
-                    vehicle_str = f"{accumulated_criteria.get('make') or ''} {accumulated_criteria.get('model') or ''}".strip()
-                    year_str = f" ({accumulated_criteria.get('year')})" if accumulated_criteria.get('year') else ""
-                    budget_str = f" avec un budget de {accumulated_criteria.get('budget_eur')} €" if accumulated_criteria.get('budget_eur') else ""
-                    draft_reply = f"Bien noté ! Nous poursuivons la recherche pour votre {vehicle_str}{year_str}{budget_str}. Avez-vous d'autres précisions (ex: boîte automatique, finition, ou FCR) ?"
-                else:
-                    draft_reply = "Bien reçu ! Quelles sont vos préférences pour votre véhicule (marque, modèle, année ou budget) ?"
 
             policy = load_agent_policy()
             conv_service = ConversationService(db, tenant_id=tenant_id)
@@ -292,6 +415,7 @@ async def _process_ai_and_auto_reply(
                             "conversation_id": str(conversation_id),
                             "recipient": from_phone_e164,
                             "wamid": send_res.wamid,
+                            "state": target_state,
                         },
                     )
                 except Exception as send_err:
@@ -306,19 +430,31 @@ async def _process_ai_and_auto_reply(
                 target_language="fr",
                 status=suggestion_status,
                 model_name=settings.GEMINI_MODEL,
-                prompt_version="v2.0",
+                prompt_version="v2.5",
             )
             db.add(suggestion)
             await db.commit()
 
-            await ws_manager.broadcast_to_tenant(
-                tenant_id=tenant_id,
-                event_type="INBOX_MESSAGE_RECEIVED",
-                data={
-                    "conversation_id": str(conversation_id),
-                    "action": "AI_AUTO_REPLY_SENT",
-                },
-            )
+            if target_state == ConversationState.HUMAN_ATTENTION.value:
+                await ws_manager.broadcast_to_tenant(
+                    tenant_id=tenant_id,
+                    event_type="HUMAN_ATTENTION_REQUIRED",
+                    data={
+                        "conversation_id": str(conversation_id),
+                        "reason": handoff_reason,
+                        "summary": conversation.handoff_summary,
+                    },
+                )
+            else:
+                await ws_manager.broadcast_to_tenant(
+                    tenant_id=tenant_id,
+                    event_type="INBOX_MESSAGE_RECEIVED",
+                    data={
+                        "conversation_id": str(conversation_id),
+                        "action": "AI_AUTO_REPLY_SENT",
+                        "state": target_state,
+                    },
+                )
         except Exception as bg_err:
             logger.error(f"Error in background AI auto-reply processing: {bg_err}", exc_info=True)
 

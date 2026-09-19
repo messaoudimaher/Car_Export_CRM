@@ -5,6 +5,9 @@ import { CustomerContext, LeadContext } from "../types";
 interface CustomerSidebarProps {
   customer?: CustomerContext;
   lead?: LeadContext;
+  mode?: "AI" | "HUMAN";
+  onTakeover?: () => void;
+  onResumeAi?: () => void;
   onOpenQuoteBuilder?: () => void;
   onOpenDocuments?: () => void;
   onEditCustomer?: () => void;
@@ -13,6 +16,9 @@ interface CustomerSidebarProps {
 export const CustomerSidebar: React.FC<CustomerSidebarProps> = ({
   customer,
   lead,
+  mode,
+  onTakeover,
+  onResumeAi,
   onOpenQuoteBuilder,
   onOpenDocuments,
   onEditCustomer,
@@ -144,6 +150,24 @@ export const CustomerSidebar: React.FC<CustomerSidebarProps> = ({
 
       {/* Action Buttons Toolbar */}
       <div className="p-4 space-y-2 mt-auto">
+        {mode === "HUMAN" ? (
+          <button
+            type="button"
+            onClick={onResumeAi}
+            className="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded transition-colors flex items-center justify-center gap-2 shadow-sm"
+          >
+            <span>🤖</span> Reprendre avec l'IA (Mode Auto)
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={onTakeover}
+            className="w-full py-2 px-3 bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs rounded transition-colors flex items-center justify-center gap-2 shadow-sm"
+          >
+            <span>👤</span> Prendre la main (Mode Humain)
+          </button>
+        )}
+
         <button
           type="button"
           onClick={onOpenQuoteBuilder}

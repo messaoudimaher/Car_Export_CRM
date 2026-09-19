@@ -215,6 +215,150 @@ async def get_conversation(
     )
 
 
+@router.get("/human-attention", response_model=ConversationListEnvelope, status_code=status.HTTP_200_OK)
+async def list_human_attention_conversations(
+    tenant_id: UUID = Depends(get_current_tenant_id),
+    session: AsyncSession = Depends(get_db_session),
+    _: CurrentUser = Depends(
+        require_roles(
+            UserRole.SUPER_ADMIN,
+            UserRole.TENANT_ADMIN,
+            UserRole.SALES_AGENT,
+            UserRole.LOGISTICS_AGENT,
+        )
+    ),
+) -> ConversationListEnvelope:
+    """Retrieve all conversations requiring human attention or active human takeover."""
+    stmt = (
+        select(WhatsAppConversation)
+        .where(
+            WhatsAppConversation.tenant_id == tenant_id,
+            or_(
+                WhatsAppConversation.conversation_state == "HUMAN_ATTENTION",
+                WhatsAppConversation.mode == "HUMAN",
+                WhatsAppConversation.conversation_state == "HUMAN_ACTIVE",
+            ),
+        )
+        .order_by(WhatsAppConversation.last_message_at.desc())
+    )
+    results = list((await session.execute(stmt)).scalars().all())
+
+    data: list[ConversationResponse] = []
+    for c in results:
+        resp = ConversationResponse.model_validate(c)
+        cust = await session.get(Customer, c.customer_id)
+        if cust:
+            resp.customer_name = cust.full_name
+            resp.customer_phone_e164 = cust.phone_e164
+
+        last_msg_stmt = (
+            select(Message)
+            .where(Message.conversation_id == c.id)
+            .order_by(Message.created_at.desc())
+            .limit(1)
+        )
+        last_msg = (await session.execute(last_msg_stmt)).scalars().first()
+        if last_msg:
+            resp.last_message_content = last_msg.content
+
+        data.append(resp)
+
+    meta = ConversationListMeta(
+        limit=len(data),
+        has_next=False,
+        next_cursor=None,
+        total=len(data),
+    )
+    return ConversationListEnvelope(success=True, data=data, meta=meta)
+
+
+@router.post("/{id}/takeover", response_model=ConversationEnvelope, status_code=status.HTTP_200_OK)
+async def takeover_conversation(
+    id: UUID,
+    tenant_id: UUID = Depends(get_current_tenant_id),
+    session: AsyncSession = Depends(get_db_session),
+    current_user: CurrentUser = Depends(
+        require_roles(
+            UserRole.SUPER_ADMIN,
+            UserRole.TENANT_ADMIN,
+            UserRole.SALES_AGENT,
+        )
+    ),
+) -> ConversationEnvelope:
+    """Admin human takeover action. Halts automatic AI replies completely (mode=HUMAN)."""
+    stmt = select(WhatsAppConversation).where(
+        WhatsAppConversation.id == id, WhatsAppConversation.tenant_id == tenant_id
+    )
+    conv = (await session.execute(stmt)).scalar_one_or_none()
+    if not conv:
+        raise ValidationException("Conversation not found under current tenant context.")
+
+    conv.mode = "HUMAN"
+    conv.conversation_state = "HUMAN_ACTIVE"
+    conv.assigned_agent_id = current_user.user_id
+    await session.commit()
+    await session.refresh(conv)
+
+    from app.core.ws_manager import ws_manager
+    await ws_manager.broadcast_to_tenant(
+        tenant_id=tenant_id,
+        event_type="CONVERSATION_TAKEOVER",
+        data={"conversation_id": str(id), "mode": "HUMAN", "agent_id": str(current_user.user_id)},
+    )
+
+    resp = ConversationResponse.model_validate(conv)
+    cust = await session.get(Customer, conv.customer_id)
+    if cust:
+        resp.customer_name = cust.full_name
+        resp.customer_phone_e164 = cust.phone_e164
+
+    return ConversationEnvelope(success=True, data=resp)
+
+
+@router.post("/{id}/resume-ai", response_model=ConversationEnvelope, status_code=status.HTTP_200_OK)
+async def resume_ai_conversation(
+    id: UUID,
+    tenant_id: UUID = Depends(get_current_tenant_id),
+    session: AsyncSession = Depends(get_db_session),
+    _: CurrentUser = Depends(
+        require_roles(
+            UserRole.SUPER_ADMIN,
+            UserRole.TENANT_ADMIN,
+            UserRole.SALES_AGENT,
+        )
+    ),
+) -> ConversationEnvelope:
+    """Admin action to resume autonomous AI handling for conversation (mode=AI)."""
+    stmt = select(WhatsAppConversation).where(
+        WhatsAppConversation.id == id, WhatsAppConversation.tenant_id == tenant_id
+    )
+    conv = (await session.execute(stmt)).scalar_one_or_none()
+    if not conv:
+        raise ValidationException("Conversation not found under current tenant context.")
+
+    conv.mode = "AI"
+    conv.conversation_state = "AI_ACTIVE"
+    conv.handoff_reason = None
+    conv.handoff_summary = None
+    await session.commit()
+    await session.refresh(conv)
+
+    from app.core.ws_manager import ws_manager
+    await ws_manager.broadcast_to_tenant(
+        tenant_id=tenant_id,
+        event_type="CONVERSATION_RESUME_AI",
+        data={"conversation_id": str(id), "mode": "AI"},
+    )
+
+    resp = ConversationResponse.model_validate(conv)
+    cust = await session.get(Customer, conv.customer_id)
+    if cust:
+        resp.customer_name = cust.full_name
+        resp.customer_phone_e164 = cust.phone_e164
+
+    return ConversationEnvelope(success=True, data=resp)
+
+
 @router.post("/{id}/assign", response_model=ConversationEnvelope, status_code=status.HTTP_200_OK)
 async def assign_conversation(
     id: UUID,

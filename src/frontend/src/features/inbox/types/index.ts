@@ -71,6 +71,11 @@ export interface ConversationThread {
   customerPhone: string;
   channel: "WHATSAPP";
   status: ThreadStatus;
+  mode?: "AI" | "HUMAN";
+  conversationState?: string;
+  handoffReason?: string;
+  handoffSummary?: string;
+  draftData?: Record<string, any>;
   unreadCount: number;
   lastMessageSnippet: string;
   lastActivityAt: string;
