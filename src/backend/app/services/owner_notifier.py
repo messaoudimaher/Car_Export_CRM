@@ -84,6 +84,58 @@ class OwnerNotificationService:
 
         return True
 
+    async def notify_owner_of_human_escalation(
+        self,
+        tenant_name: str,
+        customer_phone: str,
+        customer_name: str | None,
+        reason: str,
+        summary: str | None,
+        last_message: str | None = None,
+        phone_number_id: str | None = None,
+    ) -> bool:
+        """Dispatch real-time notification to company owner when human intervention is triggered."""
+        owner_phone = settings.OWNER_NOTIFICATION_PHONE_E164
+        ts_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+        msg_snippet = f"\n💬 *Dernier message*: \"{last_message[:200]}\"" if last_message else ""
+        sum_snippet = f"\n📌 *Détail*: {summary}" if summary else ""
+
+        alert_text = (
+            f"⚠️ *ATTENTION HUMAINE REQUISE* ({tenant_name})\n\n"
+            f"👤 *Client*: {customer_name or 'Client WhatsApp'}\n"
+            f"📱 *WhatsApp*: {customer_phone}\n"
+            f"🚨 *Motif d'escalade*: {reason}{sum_snippet}{msg_snippet}\n"
+            f"⏰ *Heure*: {ts_str}\n\n"
+            f"👉 Veuillez prendre le relais sur cette conversation."
+        )
+
+        logger.info(
+            "OWNER_ALERT_HUMAN_ATTENTION",
+            extra={
+                "customer_name": customer_name,
+                "customer_phone": customer_phone,
+                "reason": reason,
+                "summary": summary,
+                "owner_notified": bool(owner_phone and self.whatsapp),
+            },
+        )
+
+        if owner_phone and self.whatsapp:
+            target_phone_id = settings.META_WHATSAPP_PHONE_NUMBER_ID or phone_number_id or ""
+            try:
+                await self.whatsapp.send_text_message(
+                    phone_number_id=target_phone_id,
+                    recipient_e164=owner_phone,
+                    text_body=alert_text,
+                )
+                return True
+            except Exception as err:
+                logger.error(f"Failed to dispatch owner WhatsApp escalation alert: {err}", exc_info=True)
+                return False
+
+        return True
+
 
 # Global singleton instance
 owner_notification_service = OwnerNotificationService()
+

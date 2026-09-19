@@ -21,8 +21,10 @@ from app.core.agent_state_machine import (
     ConversationState,
     HandoffReason,
     compute_deterministic_state_transition,
+    is_complaint_message,
     is_explicit_confirmation,
     is_explicit_rejection,
+    is_human_requested,
 )
 from app.core.config import settings
 from app.core.logging import logger
@@ -80,7 +82,12 @@ class AgentOrchestrator:
         if not conversation:
             raise ValueError(f"Conversation '{conversation_id}' not found.")
 
-        if conversation.mode == ConversationMode.HUMAN.value or conversation.conversation_state == ConversationState.HUMAN_ACTIVE.value:
+        # STRICT HUMAN INTERVENTION GATE:
+        # When HUMAN_ACTIVE or mode == HUMAN, AI automatic replies MUST STOP.
+        if (
+            conversation.mode == ConversationMode.HUMAN.value
+            or conversation.conversation_state == ConversationState.HUMAN_ACTIVE.value
+        ):
             logger.info(
                 "AGENT_TURN_SKIPPED_HUMAN_ACTIVE",
                 extra={"conversation_id": str(conversation_id)},
@@ -127,6 +134,7 @@ class AgentOrchestrator:
         )
 
         start_llm = time.perf_counter()
+        is_tech_err = False
         try:
             decision, llm_response = await self.llm.generate_structured_output(llm_request, AgentDecision)
             llm_latency_ms = (time.perf_counter() - start_llm) * 1000.0
@@ -134,11 +142,24 @@ class AgentOrchestrator:
         except Exception as llm_err:
             llm_latency_ms = (time.perf_counter() - start_llm) * 1000.0
             logger.error(f"Gemini API invocation failed ({llm_latency_ms:.1f}ms): {llm_err}", exc_info=True)
-            # Safe grounded fallback
+            is_tech_err = True
+            # Graceful localized escalation fallback message
+            lang = memory.preferred_language or "fr"
+            if lang == "ar":
+                fallback_msg = "حدث خطأ فني مؤقت. سيقوم أحد مستشارينا بالتواصل معك مباشرة في أقرب وقت."
+            elif lang == "de":
+                fallback_msg = "Ein vorübergehender technischer Fehler ist aufgetreten. Ein Berater wird sich in Kürze persönlich bei Ihnen melden."
+            elif lang == "en":
+                fallback_msg = "A temporary technical issue occurred. A human advisor will reach out to assist you shortly."
+            else:
+                fallback_msg = "Un incident technique temporaire est survenu. Un conseiller humain va prendre le relais directement avec vous très rapidement."
+
             decision = AgentDecision(
-                intent="OTHER",
-                language=memory.preferred_language or "fr",
-                response_text="Merci pour votre message ! Quelles sont les caractéristiques du véhicule que vous recherchez (marque, modèle, année ou budget) ?",
+                intent="HUMAN_REQUEST",
+                language=lang,
+                human_attention_required=True,
+                human_attention_reason="TECHNICAL_ERROR",
+                response_text=fallback_msg,
                 reasoning=f"Fallback triggered due to LLM error: {llm_err}",
             )
 
@@ -156,17 +177,37 @@ class AgentOrchestrator:
         conversation.draft_data = dict(active_draft)
         flag_modified(conversation, "draft_data")
 
-        # 5. Deterministic State Machine Transition
+        # 5. Deterministic State Machine Transition (Human Exceptions Handling)
         has_criteria = bool(active_draft.get("make") or active_draft.get("model"))
         is_unsupported = self.knowledge.is_explicitly_unsupported(text_body) or (
-            decision.human_attention_required and decision.intent == "FAQ"
+            decision.human_attention_required and (decision.intent == "FAQ" or decision.human_attention_reason == "UNSUPPORTED_QUESTION")
         )
-        wants_human = any(
-            kw in text_body.lower() for kw in ["parler a un humain", "parler à un humain", "humain", "conseiller", "agent humain", "responsable", "telephone"]
-        ) or (decision.human_attention_required and not is_unsupported)
-        is_price_req = any(kw in text_body.lower() for kw in ["prix final", "devis officiel", "remise", "negocier"])
+        is_complaint = (
+            is_complaint_message(text_body)
+            or decision.intent == "COMPLAINT"
+            or decision.human_attention_reason == "COMPLAINT"
+        )
+        is_price_req = (
+            any(kw in text_body.lower() for kw in ["prix final", "devis officiel", "remise", "negocier", "rabatt", "discount", "خصم", "تخفيض"])
+            or decision.intent == "PRICE_REQUEST"
+            or decision.human_attention_reason == "PRICE_REQUEST"
+        )
+        is_ambiguous = (
+            decision.human_attention_reason == "AMBIGUOUS_REQUEST"
+            or (decision.confidence < 0.35 and not has_criteria)
+            or (decision.intent == "OTHER" and decision.confidence < 0.5 and not has_criteria and len(text_body.split()) > 3)
+        )
+        wants_human = (
+            is_human_requested(text_body)
+            or decision.intent == "HUMAN_REQUEST"
+            or decision.human_attention_reason == "CUSTOMER_REQUESTED_HUMAN"
+            or (
+                decision.human_attention_required
+                and not (is_unsupported or is_complaint or is_price_req or is_ambiguous or is_tech_err)
+            )
+        )
 
-        if is_unsupported and not decision.human_attention_required:
+        if (is_unsupported or is_complaint or wants_human or is_price_req or is_ambiguous) and not decision.human_attention_required:
             decision.human_attention_required = True
 
         transition_res = compute_deterministic_state_transition(
@@ -178,12 +219,28 @@ class AgentOrchestrator:
             customer_requested_human=wants_human,
             is_price_commitment_request=is_price_req,
             is_unsupported_question=is_unsupported,
+            is_complaint=is_complaint,
+            is_ambiguous=is_ambiguous,
+            is_technical_error=is_tech_err,
         )
 
+        prev_state = conversation.conversation_state
         conversation.conversation_state = transition_res.next_state.value
         if transition_res.handoff_reason:
             conversation.handoff_reason = transition_res.handoff_reason.value
             conversation.handoff_summary = transition_res.summary_note
+
+            # Notify owner of human attention escalation if entering HUMAN_ATTENTION
+            if transition_res.next_state == ConversationState.HUMAN_ATTENTION and prev_state != ConversationState.HUMAN_ATTENTION.value:
+                await self.owner_notifier.notify_owner_of_human_escalation(
+                    tenant_name=self.knowledge.company.name,
+                    customer_phone=from_phone_e164,
+                    customer_name=memory.customer_name,
+                    reason=transition_res.handoff_reason.value,
+                    summary=transition_res.summary_note,
+                    last_message=text_body,
+                    phone_number_id=phone_number_id,
+                )
 
         # 6. Synchronize & Persist Active VehicleRequest in PostgreSQL
         if has_criteria or decision.intent in ("VEHICLE_REQUEST", "REQUEST_UPDATE"):

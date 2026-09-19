@@ -185,6 +185,148 @@ REJECTION_KEYWORDS: dict[str, set[str]] = {
 }
 
 
+# Multilingual human representative keywords
+HUMAN_REQUEST_KEYWORDS: dict[str, set[str]] = {
+    "fr": {
+        "parler a un humain",
+        "parler à un humain",
+        "parler a un conseiller",
+        "parler à un conseiller",
+        "parler a un agent",
+        "parler à un agent",
+        "agent humain",
+        "humain",
+        "conseiller",
+        "responsable",
+        "telephone",
+        "téléphone",
+        "appeler",
+        "contactez moi",
+        "joindre quelqu'un",
+    },
+    "en": {
+        "human",
+        "human agent",
+        "real person",
+        "talk to human",
+        "speak to a person",
+        "representative",
+        "customer service",
+        "call me",
+        "support agent",
+    },
+    "ar": {
+        "انسان",
+        "بشري",
+        "موظف",
+        "خدمة العملاء",
+        "مسؤول",
+        "اتصل بي",
+        "مكالمة",
+        "تحدث مع شخص",
+        "مندوب",
+    },
+    "derja": {
+        "rajil",
+        "wehed",
+        "mouch robot",
+        "kallamni",
+        "aayetli",
+        "responsable",
+        "conseiller",
+        "khadem",
+    },
+    "de": {
+        "mensch",
+        "berater",
+        "mitarbeiter",
+        "kundenservice",
+        "anrufen",
+        "telefon",
+        "menschlicher support",
+    },
+}
+
+# Multilingual complaint / dispute keywords
+COMPLAINT_KEYWORDS: dict[str, set[str]] = {
+    "fr": {
+        "plainte",
+        "reclamation",
+        "réclamation",
+        "mécontent",
+        "mecontent",
+        "arnaque",
+        "escroquerie",
+        "voleur",
+        "mauvais service",
+        "inacceptable",
+        "scandale",
+    },
+    "en": {
+        "complaint",
+        "scam",
+        "fraud",
+        "unhappy",
+        "terrible service",
+        "horrible",
+        "awful",
+        "bad experience",
+        "cheat",
+        "lawyer",
+    },
+    "ar": {
+        "شكوى",
+        "نصب",
+        "احتيال",
+        "خدمة سيئة",
+        "غير راض",
+        "سرقة",
+        "كذاب",
+        "نصاب",
+    },
+    "derja": {
+        "khayba",
+        "sarqa",
+        "qelleb",
+        "ghachech",
+        "service zero",
+        "mouch behya",
+    },
+    "de": {
+        "beschwerde",
+        "betrug",
+        "unzufrieden",
+        "schlechter service",
+        "abzocke",
+        "anwalt",
+    },
+}
+
+
+def is_human_requested(text: str) -> bool:
+    """Check if customer message contains an explicit request for human assistance."""
+    cleaned = text.strip().lower()
+    if not cleaned:
+        return False
+    for lang_set in HUMAN_REQUEST_KEYWORDS.values():
+        for kw in lang_set:
+            if kw in cleaned:
+                return True
+    return False
+
+
+def is_complaint_message(text: str) -> bool:
+    """Check if customer message indicates a complaint or serious dissatisfaction."""
+    cleaned = text.strip().lower()
+    if not cleaned:
+        return False
+    for lang_set in COMPLAINT_KEYWORDS.values():
+        for kw in lang_set:
+            if kw in cleaned:
+                return True
+    return False
+
+
 def is_explicit_confirmation(text: str) -> bool:
     """Check if customer response constitutes explicit confirmation of summarized requirements."""
     cleaned = text.strip().lower()
@@ -254,6 +396,10 @@ def compute_deterministic_state_transition(
     is_price_commitment_request: bool = False,
     has_active_unconfirmed_summary: bool = False,
     is_unsupported_question: bool = False,
+    is_complaint: bool = False,
+    is_ambiguous: bool = False,
+    is_technical_error: bool = False,
+    is_business_decision: bool = False,
 ) -> StateTransitionResult:
     """Compute the next conversation state deterministically based on verified backend business rules.
 
@@ -265,7 +411,14 @@ def compute_deterministic_state_transition(
         else ConversationState(str(current_state))
     )
 
-    # 1. Immediate human escalation triggers
+    # 1. Immediate human escalation triggers (Strictly for exceptions)
+    if is_technical_error:
+        return StateTransitionResult(
+            next_state=ConversationState.HUMAN_ATTENTION,
+            handoff_reason=HandoffReason.TECHNICAL_ERROR,
+            summary_note="Technical processing failure; escalated for manual advisor review.",
+        )
+
     if is_unsupported_question:
         return StateTransitionResult(
             next_state=ConversationState.HUMAN_ATTENTION,
@@ -280,11 +433,32 @@ def compute_deterministic_state_transition(
             summary_note="Customer explicitly requested human sales representative.",
         )
 
+    if is_complaint:
+        return StateTransitionResult(
+            next_state=ConversationState.HUMAN_ATTENTION,
+            handoff_reason=HandoffReason.COMPLAINT,
+            summary_note="Customer complaint or serious dispute detected.",
+        )
+
     if is_price_commitment_request:
         return StateTransitionResult(
             next_state=ConversationState.HUMAN_ATTENTION,
             handoff_reason=HandoffReason.PRICE_REQUEST,
             summary_note="Customer requested binding pricing or discount commitment.",
+        )
+
+    if is_business_decision:
+        return StateTransitionResult(
+            next_state=ConversationState.HUMAN_ATTENTION,
+            handoff_reason=HandoffReason.BUSINESS_DECISION_REQUIRED,
+            summary_note="Inquiry requires business approval or custom financing.",
+        )
+
+    if is_ambiguous:
+        return StateTransitionResult(
+            next_state=ConversationState.HUMAN_ATTENTION,
+            handoff_reason=HandoffReason.AMBIGUOUS_REQUEST,
+            summary_note="Unresolved ambiguity or repetitive incomprehensible input.",
         )
 
     # 2. Check for explicit confirmation or rejection

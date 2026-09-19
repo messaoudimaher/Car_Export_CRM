@@ -316,4 +316,5 @@ async def test_agent_handles_llm_timeout_and_failure_gracefully():
         # Should fall back cleanly without raising exception
         assert len(decision.response_text) > 0
         assert len(mock_wa.dispatched_messages) == 1
-        assert "Merci pour votre message" in decision.response_text
+        assert "incident technique" in decision.response_text or "conseiller" in decision.response_text
+

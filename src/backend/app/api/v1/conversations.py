@@ -315,6 +315,7 @@ async def takeover_conversation(
     return ConversationEnvelope(success=True, data=resp)
 
 
+@router.post("/{id}/resume", response_model=ConversationEnvelope, status_code=status.HTTP_200_OK)
 @router.post("/{id}/resume-ai", response_model=ConversationEnvelope, status_code=status.HTTP_200_OK)
 async def resume_ai_conversation(
     id: UUID,
