@@ -1,0 +1,2 @@
+﻿request_id,tenant_id,customer_id,customer_phone,customer_name,make,model,year,fuel_type,transmission,budget_eur,destination_port,fcr_compatible,additional_requirements,confirmed_at,status
+01a0ba7c-0226-7efa-b445-3120e0413f58,01a0ba7c-0157-7bb3-954c-eb69cc40042f,01a0ba7c-0158-76e5-ac24-606d89f81953,+21698223344,,Mercedes-Benz,Classe C,2022,Diesel,,30000.00,Rades,true,,2026-09-19T16:24:44.424144+00:00,QUALIFIED
